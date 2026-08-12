@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en-AU">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Globe</title>
+    <link rel="stylesheet" href="./globe.css" />
+  </head>
+  <body>
+    <header>
+      <nav aria-label="Primary">
+        <a href="./">Home</a>
+        <a href="./packet-pathway.html">Packet Pathway</a>
+        <a href="./globe.html" aria-current="page">Globe</a>
+      </nav>
+    </header>
+    <main>
+      <div class="page">
+        <p class="eyebrow">WebGL demonstration</p>
+        <h1>Globe</h1>
+        <p class="lede">
+          A dotted wireframe sphere, rendered with three.js. Click and drag (or touch) to spin
+          it; let go and it coasts, then settles back into a slow idle turn.
+        </p>
+
+        <div class="stage-wrap">
+          <div
+            id="globe-stage"
+            role="img"
+            aria-label="An interactive 3D wireframe globe made of latitude and longitude lines and a dotted point cloud, which can be dragged to spin."
+          ></div>
+        </div>
+
+        <p class="hint">Drag to spin</p>
+      </div>
+    </main>
+    <script type="module" src="./globe.ts"></script>
+  </body>
+</html>
