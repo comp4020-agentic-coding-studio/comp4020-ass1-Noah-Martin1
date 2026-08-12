@@ -104,6 +104,7 @@ h1 {
 }
 
 #globe-stage {
+  position: relative;
   width: min(100%, 560px);
   aspect-ratio: 1;
   touch-action: none;
@@ -118,6 +119,14 @@ h1 {
   display: block;
   width: 100%;
   height: 100%;
+}
+
+.gloss {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  pointer-events: none;
+  background: radial-gradient(circle at 32% 26%, rgb(255 255 255 / 55%) 0%, rgb(255 255 255 / 18%) 18%, transparent 45%);
 }
 
 .hint {

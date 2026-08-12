@@ -12,25 +12,12 @@ const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matc
 const TEXTURE_WIDTH = 512;
 const TEXTURE_HEIGHT = 256;
 
-const OCEAN_SHALLOW = [56, 150, 199] as const;
-const OCEAN_DEEP = [24, 90, 138] as const;
-const BORDER_COLOR = [255, 255, 255] as const;
-const COASTLINE_COLOR = [24, 60, 90] as const;
-
-const COUNTRY_PALETTE: ReadonlyArray<readonly [number, number, number]> = [
-  [247, 199, 90], // gold
-  [239, 131, 84], // coral
-  [244, 166, 198], // pink
-  [149, 213, 178], // mint
-  [201, 173, 167], // clay
-  [255, 180, 162], // peach
-  [132, 169, 140], // sage
-  [224, 122, 95], // terracotta
-  [242, 204, 143], // sand
-  [168, 178, 222], // periwinkle
-  [163, 196, 226], // sky
-  [214, 164, 216], // lilac
-];
+const OCEAN_SHALLOW = [47, 161, 224] as const;
+const OCEAN_DEEP = [21, 108, 176] as const;
+const LAND_GREEN_A = [96, 191, 110] as const;
+const LAND_GREEN_B = [76, 168, 96] as const;
+const OUTLINE_COLOR = [20, 56, 42] as const;
+const OUTLINE_THICKNESS = 2;
 
 interface ContinentBlob {
   dx: number;
@@ -39,7 +26,6 @@ interface ContinentBlob {
 }
 
 interface Continent {
-  seedCount: number;
   blobs: ContinentBlob[];
 }
 
@@ -47,7 +33,6 @@ interface Continent {
 // evocative of real continents, not a literal atlas -- this is a toy globe.
 const CONTINENTS: Continent[] = [
   {
-    seedCount: 9,
     blobs: [
       { dx: 0.14, dy: 0.22, r: 0.085 },
       { dx: 0.2, dy: 0.3, r: 0.075 },
@@ -57,7 +42,6 @@ const CONTINENTS: Continent[] = [
     ],
   },
   {
-    seedCount: 6,
     blobs: [
       { dx: 0.26, dy: 0.58, r: 0.055 },
       { dx: 0.29, dy: 0.68, r: 0.05 },
@@ -66,14 +50,12 @@ const CONTINENTS: Continent[] = [
     ],
   },
   {
-    seedCount: 5,
     blobs: [
       { dx: 0.47, dy: 0.2, r: 0.045 },
       { dx: 0.52, dy: 0.24, r: 0.04 },
     ],
   },
   {
-    seedCount: 7,
     blobs: [
       { dx: 0.5, dy: 0.5, r: 0.06 },
       { dx: 0.53, dy: 0.6, r: 0.058 },
@@ -82,7 +64,6 @@ const CONTINENTS: Continent[] = [
     ],
   },
   {
-    seedCount: 10,
     blobs: [
       { dx: 0.62, dy: 0.22, r: 0.07 },
       { dx: 0.7, dy: 0.18, r: 0.075 },
@@ -93,7 +74,6 @@ const CONTINENTS: Continent[] = [
     ],
   },
   {
-    seedCount: 4,
     blobs: [
       { dx: 0.82, dy: 0.66, r: 0.05 },
       { dx: 0.87, dy: 0.7, r: 0.038 },
@@ -133,67 +113,23 @@ function buildLandMask(width: number, height: number): Uint8Array {
   return mask;
 }
 
-interface Seed {
-  x: number;
-  y: number;
-  color: readonly [number, number, number];
-}
-
-function scatterSeeds(mask: Uint8Array, width: number, height: number): Seed[] {
-  const random = mulberry32(1337);
-  const seeds: Seed[] = [];
-  let colorIndex = 0;
-  for (const continent of CONTINENTS) {
-    const bounds = continent.blobs.reduce(
-      (acc, blob) => ({
-        minX: Math.min(acc.minX, (blob.dx - blob.r) * width),
-        maxX: Math.max(acc.maxX, (blob.dx + blob.r) * width),
-        minY: Math.min(acc.minY, (blob.dy - blob.r) * height),
-        maxY: Math.max(acc.maxY, (blob.dy + blob.r) * height),
-      }),
-      { minX: Infinity, maxX: -Infinity, minY: Infinity, maxY: -Infinity },
-    );
-
-    let placed = 0;
-    let attempts = 0;
-    while (placed < continent.seedCount && attempts < continent.seedCount * 40) {
-      attempts++;
-      const x = bounds.minX + random() * (bounds.maxX - bounds.minX);
-      const y = bounds.minY + random() * (bounds.maxY - bounds.minY);
-      const px = Math.round(x);
-      const py = Math.round(y);
-      if (px < 0 || px >= width || py < 0 || py >= height) continue;
-      if (mask[py * width + px] !== 1) continue;
-      seeds.push({ x, y, color: COUNTRY_PALETTE[colorIndex % COUNTRY_PALETTE.length] });
-      colorIndex++;
-      placed++;
+function continentIndexAt(x: number, y: number, width: number, height: number): number {
+  for (let c = 0; c < CONTINENTS.length; c++) {
+    for (const blob of CONTINENTS[c].blobs) {
+      const dx = x - blob.dx * width;
+      const dy = y - blob.dy * height;
+      const r = blob.r * width;
+      if (dx * dx + dy * dy <= r * r) return c;
     }
   }
-  return seeds;
-}
-
-function nearestSeedIndex(x: number, y: number, seeds: Seed[]): number {
-  let best = 0;
-  let bestDist = Infinity;
-  for (let i = 0; i < seeds.length; i++) {
-    const dx = seeds[i].x - x;
-    const dy = seeds[i].y - y;
-    const dist = dx * dx + dy * dy;
-    if (dist < bestDist) {
-      bestDist = dist;
-      best = i;
-    }
-  }
-  return best;
+  return -1;
 }
 
 function buildWorldTexture(): THREE.Texture {
   const width = TEXTURE_WIDTH;
   const height = TEXTURE_HEIGHT;
   const mask = buildLandMask(width, height);
-  const seeds = scatterSeeds(mask, width, height);
 
-  const seedOf = new Int16Array(width * height).fill(-1);
   const imageData = new ImageData(width, height);
   const pixels = imageData.data;
 
@@ -201,9 +137,8 @@ function buildWorldTexture(): THREE.Texture {
     for (let x = 0; x < width; x++) {
       const i = y * width + x;
       if (mask[i] === 1) {
-        const seedIndex = nearestSeedIndex(x, y, seeds);
-        seedOf[i] = seedIndex;
-        const [r, g, b] = seeds[seedIndex].color;
+        const continentIndex = continentIndexAt(x, y, width, height);
+        const [r, g, b] = continentIndex % 2 === 0 ? LAND_GREEN_A : LAND_GREEN_B;
         pixels[i * 4] = r;
         pixels[i * 4 + 1] = g;
         pixels[i * 4 + 2] = b;
@@ -218,34 +153,41 @@ function buildWorldTexture(): THREE.Texture {
     }
   }
 
-  // Border pass: country borders where neighbouring land pixels belong to a
-  // different seed, coastlines where land meets ocean.
+  // Coastline pass: any land pixel touching ocean (on any of the 4 sides) is
+  // an edge; dilate a few times so the outline reads as a thick cartoon
+  // stroke rather than a hairline.
+  let coast = new Uint8Array(width * height);
   for (let y = 0; y < height; y++) {
     for (let x = 0; x < width; x++) {
       const i = y * width + x;
       if (mask[i] !== 1) continue;
-      const right = x + 1 < width ? i + 1 : -1;
-      const down = y + 1 < height ? i + width : -1;
-      let isBorder = false;
-      let isCoast = false;
-      if (right >= 0) {
-        if (mask[right] === 1 && seedOf[right] !== seedOf[i]) isBorder = true;
-        if (mask[right] === 0) isCoast = true;
-      }
-      if (down >= 0) {
-        if (mask[down] === 1 && seedOf[down] !== seedOf[i]) isBorder = true;
-        if (mask[down] === 0) isCoast = true;
-      }
-      if (isBorder) {
-        pixels[i * 4] = BORDER_COLOR[0];
-        pixels[i * 4 + 1] = BORDER_COLOR[1];
-        pixels[i * 4 + 2] = BORDER_COLOR[2];
-      } else if (isCoast) {
-        pixels[i * 4] = COASTLINE_COLOR[0];
-        pixels[i * 4 + 1] = COASTLINE_COLOR[1];
-        pixels[i * 4 + 2] = COASTLINE_COLOR[2];
+      const left = x > 0 ? mask[i - 1] : 0;
+      const right = x + 1 < width ? mask[i + 1] : 0;
+      const up = y > 0 ? mask[i - width] : 0;
+      const down = y + 1 < height ? mask[i + width] : 0;
+      if (left === 0 || right === 0 || up === 0 || down === 0) coast[i] = 1;
+    }
+  }
+  for (let pass = 1; pass < OUTLINE_THICKNESS; pass++) {
+    const next = new Uint8Array(coast);
+    for (let y = 0; y < height; y++) {
+      for (let x = 0; x < width; x++) {
+        const i = y * width + x;
+        if (mask[i] !== 1 || coast[i] === 1) continue;
+        const left = x > 0 ? coast[i - 1] : 0;
+        const right = x + 1 < width ? coast[i + 1] : 0;
+        const up = y > 0 ? coast[i - width] : 0;
+        const down = y + 1 < height ? coast[i + width] : 0;
+        if (left === 1 || right === 1 || up === 1 || down === 1) next[i] = 1;
       }
     }
+    coast = next;
+  }
+  for (let i = 0; i < coast.length; i++) {
+    if (coast[i] !== 1) continue;
+    pixels[i * 4] = OUTLINE_COLOR[0];
+    pixels[i * 4 + 1] = OUTLINE_COLOR[1];
+    pixels[i * 4 + 2] = OUTLINE_COLOR[2];
   }
 
   const canvas = document.createElement("canvas");
@@ -270,22 +212,33 @@ function buildCloudTexture(): THREE.Texture {
   ctx.clearRect(0, 0, width, height);
 
   const random = mulberry32(4242);
-  const clumpCount = 26;
+  const clumpCount = 16;
   for (let c = 0; c < clumpCount; c++) {
     const cx = random() * width;
-    const cy = height * 0.12 + random() * height * 0.76;
-    const puffCount = 3 + Math.floor(random() * 4);
+    const cy = height * 0.14 + random() * height * 0.72;
+    const puffCount = 4 + Math.floor(random() * 4);
+    const puffs: { px: number; py: number; radius: number }[] = [];
     for (let p = 0; p < puffCount; p++) {
-      const px = cx + (random() - 0.5) * width * 0.06;
-      const py = cy + (random() - 0.5) * height * 0.05;
-      const radius = (width * 0.012 + random() * width * 0.022) * (0.7 + random() * 0.6);
-      const gradient = ctx.createRadialGradient(px, py, 0, px, py, radius);
-      const alpha = 0.3 + random() * 0.35;
-      gradient.addColorStop(0, `rgba(255, 255, 255, ${alpha})`);
-      gradient.addColorStop(1, "rgba(255, 255, 255, 0)");
-      ctx.fillStyle = gradient;
+      puffs.push({
+        px: cx + (random() - 0.5) * width * 0.09,
+        py: cy + (random() - 0.5) * height * 0.06,
+        radius: (width * 0.018 + random() * width * 0.026) * (0.7 + random() * 0.6),
+      });
+    }
+
+    // Outline pass: a slightly larger, pale rim behind each puff.
+    ctx.fillStyle = "rgba(214, 234, 250, 0.85)";
+    for (const puff of puffs) {
       ctx.beginPath();
-      ctx.arc(px, py, radius, 0, Math.PI * 2);
+      ctx.arc(puff.px, puff.py, puff.radius * 1.18, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // Fill pass: solid white on top, giving the rim a visible edge.
+    ctx.fillStyle = "rgba(255, 255, 255, 0.95)";
+    for (const puff of puffs) {
+      ctx.beginPath();
+      ctx.arc(puff.px, puff.py, puff.radius, 0, Math.PI * 2);
       ctx.fill();
     }
   }
