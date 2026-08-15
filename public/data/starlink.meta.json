@@ -1,0 +1,7 @@
+{
+  "source": "CelesTrak GP catalogue (GROUP=starlink)",
+  "sourceUrl": "https://celestrak.org/NORAD/elements/gp.php?GROUP=starlink&FORMAT=tle",
+  "fetchedAt": "2026-08-15T08:29:51Z",
+  "satelliteCount": 10753,
+  "note": "Snapshot of published two-line elements, not a live feed."
+}
