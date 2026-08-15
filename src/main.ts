@@ -1,3 +1,4 @@
+import { createCablePathIndex } from "./data/cable-paths";
 import { cableSegments, loadCableMeta, loadCables } from "./data/generated/cables";
 import { loadCoverage, loadStarlinkGateways, type Coverage } from "./data/generated/coverage";
 import { loadDataCentres, type DataCentreIndex } from "./data/generated/datacentres";
@@ -473,6 +474,20 @@ loadCoverage()
 // Real cable geography, and the attribution its licence requires.
 loadCables()
   .then((collection) => {
+    /*
+     * With the real network in hand, submarine legs can follow the cable that
+     * actually carries them instead of a great circle. Undersea cables dogleg
+     * around shelves and trenches; a straight arc through the middle of an
+     * ocean is the one shape they never take.
+     */
+    const cablePaths = createCablePathIndex(collection);
+    route.setLegPathProvider((from, to) => {
+      if (to.infra !== "fibre-submarine") return null;
+      return cablePaths.between(from.location, to.location);
+    });
+    // Anything already drawn was built on arcs; rebuild it on cables.
+    route.setRoute(state.route);
+
     network.setCables(collection.features.flatMap((feature) => cableSegments(feature)));
     return loadCableMeta();
   })

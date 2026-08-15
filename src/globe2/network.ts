@@ -17,6 +17,14 @@ import { EARTH_RADIUS_UNITS, PALETTE } from "./constants";
 const SURFACE = EARTH_RADIUS_UNITS * 1.006;
 
 /**
+ * Starlink gateway marker size, off and on. The gap is deliberately large: the
+ * "off" state has to sit under the satellites, the "on" state has to sit over
+ * them, and there is no single size that does both.
+ */
+const GATEWAY_SIZE_OFF = 7;
+const GATEWAY_SIZE_ON = 20;
+
+/**
  * Marker glyphs. Shape carries the meaning alongside colour so the layers stay
  * distinguishable without relying on hue alone.
  */
@@ -25,11 +33,19 @@ const enum Glyph {
   Ring = 1,
   Square = 2,
   Diamond = 3,
+  /**
+   * Starlink gateways. They need their own glyph because they compete with the
+   * whole ~10,700-satellite field for attention: a plain ring at marker size
+   * simply vanished into it once the layer was switched on. A bright core plus
+   * a soft halo survives that background.
+   */
+  Station = 4,
 }
 
 const MARKER_VERTEX = /* glsl */ `
   uniform float uPixelRatio;
   uniform float uSize;
+  uniform float uMaxSize;
   varying float vFacing;
 
   void main() {
@@ -40,7 +56,7 @@ const MARKER_VERTEX = /* glsl */ `
     // this marker and the eye.
     vFacing = dot(normalize(world.xyz), normalize(cameraPosition - world.xyz));
     vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
-    gl_PointSize = clamp(uSize * uPixelRatio * (3.0 / max(0.001, -mvPosition.z)), 2.0, 16.0);
+    gl_PointSize = clamp(uSize * uPixelRatio * (3.0 / max(0.001, -mvPosition.z)), 2.0, uMaxSize);
     gl_Position = projectionMatrix * mvPosition;
   }
 `;
@@ -61,13 +77,23 @@ const MARKER_FRAGMENT = /* glsl */ `
     if (uGlyph == 0) {
       alpha = smoothstep(0.5, 0.1, length(p));
     } else if (uGlyph == 1) {
+      // A thicker annulus with a faint core. The hairline version disappeared
+      // at any realistic marker size.
       float r = length(p);
-      alpha = smoothstep(0.5, 0.42, r) * smoothstep(0.24, 0.32, r);
+      alpha = smoothstep(0.5, 0.34, r) * smoothstep(0.1, 0.26, r) + smoothstep(0.16, 0.0, r) * 0.5;
     } else if (uGlyph == 2) {
       vec2 d = abs(p);
       alpha = 1.0 - step(0.36, max(d.x, d.y));
-    } else {
+    } else if (uGlyph == 3) {
       alpha = 1.0 - step(0.44, abs(p.x) + abs(p.y));
+    } else {
+      // Gateway: solid core, crisp ring, and a soft halo that carries the eye
+      // to it across a field of satellites.
+      float r = length(p) * 2.0;
+      float core = smoothstep(0.42, 0.0, r);
+      float ring = smoothstep(0.94, 0.74, r) * smoothstep(0.52, 0.7, r);
+      float halo = smoothstep(1.0, 0.2, r) * 0.35;
+      alpha = core + ring + halo;
     }
 
     alpha *= uOpacity;
@@ -126,6 +152,7 @@ function buildMarkers(
   colour: number,
   glyph: Glyph,
   size: number,
+  maxSize = 26,
 ): Markers {
   const positions = new Float32Array(locations.length * 3);
   const vector = new THREE.Vector3();
@@ -145,6 +172,7 @@ function buildMarkers(
       uPixelRatio: { value: Math.min(window.devicePixelRatio || 1, 2) },
       uOpacity: { value: 0.3 },
       uSize: { value: size },
+      uMaxSize: { value: maxSize },
       uGlyph: { value: glyph },
     },
     vertexShader: MARKER_VERTEX,
@@ -264,17 +292,37 @@ export function createNetworkLayer(): NetworkLayer {
     }
 
     const points: number[] = [];
-    const vector = new THREE.Vector3();
+    const a = new THREE.Vector3();
+    const b = new THREE.Vector3();
+    const interpolated = new THREE.Vector3();
     const radius = EARTH_RADIUS_UNITS * 1.0015;
+
+    /*
+     * Long spans have to be subdivided or the cable sinks into the planet.
+     * A straight chord between two surface points dips below the sphere by
+     * R(1 - cos(θ/2)); at this draw radius the clearance is only 0.0024 units,
+     * so anything past about 7° of arc vanishes behind the globe. TeleGeography
+     * ships 727 segments over 5° and one of 50°, which is why whole ocean
+     * crossings appeared to be missing.
+     */
+    const MAX_SEGMENT_RADIANS = (1.5 * Math.PI) / 180;
 
     for (const line of segments) {
       for (let i = 1; i < line.length; i++) {
         const [lonA, latA] = line[i - 1];
         const [lonB, latB] = line[i];
-        latLonToVector3({ lat: latA, lon: lonA }, radius, vector);
-        points.push(vector.x, vector.y, vector.z);
-        latLonToVector3({ lat: latB, lon: lonB }, radius, vector);
-        points.push(vector.x, vector.y, vector.z);
+        latLonToVector3({ lat: latA, lon: lonA }, radius, a);
+        latLonToVector3({ lat: latB, lon: lonB }, radius, b);
+
+        const steps = Math.max(1, Math.ceil(a.angleTo(b) / MAX_SEGMENT_RADIANS));
+        let previous = a.clone();
+        for (let s = 1; s <= steps; s++) {
+          // Slerp keeps the intermediate points on the sphere; a lerp would
+          // reintroduce the same sag it is meant to remove.
+          interpolated.copy(a).lerp(b, s / steps).normalize().multiplyScalar(radius);
+          points.push(previous.x, previous.y, previous.z, interpolated.x, interpolated.y, interpolated.z);
+          previous = interpolated.clone();
+        }
       }
     }
 
@@ -448,11 +496,16 @@ export function createNetworkLayer(): NetworkLayer {
     groundStations.points.geometry.dispose();
     groundStations.material.dispose();
 
+    // Bigger than the other marker layers, with a raised size ceiling. A ring at
+    // the old size was effectively invisible once switched on, which made the
+    // toggle look broken rather than subtle — and there are only ~337 of these,
+    // so they can afford the presence.
     groundStations = buildMarkers(
       gateways.map(([lon, lat]) => ({ lat, lon })),
       PALETTE.groundStation,
-      Glyph.Ring,
-      5.5,
+      Glyph.Station,
+      GATEWAY_SIZE_OFF,
+      40,
     );
     groundStations.material.uniforms.uPixelRatio.value = pixelRatio;
     group.add(groundStations.points);
@@ -469,7 +522,14 @@ export function createNetworkLayer(): NetworkLayer {
     // Much lower than the other layers at both ends: 91k additive dots reach
     // the same visual weight as a few dozen markers at a fraction of the alpha.
     if (towerMaterial) towerMaterial.uniforms.uOpacity.value = layers.towers ? 0.5 : 0.1;
-    groundStations.material.uniforms.uOpacity.value = layers.groundStations ? 0.95 : 0.22;
+    // Size as well as opacity. Opacity alone could not win: the gateways share
+    // the screen with the whole satellite field, so at marker size they read as
+    // more of the same speckle no matter how bright they are. Growing them is
+    // what separates them from it.
+    groundStations.material.uniforms.uSize.value = layers.groundStations
+      ? GATEWAY_SIZE_ON
+      : GATEWAY_SIZE_OFF;
+    groundStations.material.uniforms.uOpacity.value = layers.groundStations ? 1.6 : 0.28;
     servers.material.uniforms.uOpacity.value = layers.servers ? 0.95 : 0.3;
 
     if (dataCentreMaterial) {

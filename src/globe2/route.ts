@@ -83,14 +83,69 @@ function arcBetween(from: THREE.Vector3, to: THREE.Vector3, lift: number): THREE
   return points;
 }
 
+/**
+ * Samples a path that has to follow a given ground track — a real cable route
+ * rather than the shortest line. Each supplied vertex is slerped to the next so
+ * the path stays on the sphere, and the same midpoint lift is applied across
+ * the whole run so it reads as one arc rather than a chain of separate ones.
+ */
+function pathAlong(waypoints: readonly (readonly [number, number])[], radius: number, lift: number): THREE.Vector3[] {
+  const directions: THREE.Vector3[] = waypoints.map((point) =>
+    latLonToVector3({ lat: point[1], lon: point[0] }, 1),
+  );
+
+  // Cumulative angle, so the lift envelope tracks distance travelled rather
+  // than vertex count — cable data is far denser near shore than mid-ocean.
+  const spans: number[] = [];
+  let total = 0;
+  for (let i = 1; i < directions.length; i++) {
+    const span = directions[i - 1].angleTo(directions[i]);
+    spans.push(span);
+    total += span;
+  }
+  if (total < 1e-9) return directions.map((d) => d.clone().multiplyScalar(radius));
+
+  const MAX_STEP = (1.5 * Math.PI) / 180;
+  const points: THREE.Vector3[] = [];
+  let travelled = 0;
+
+  for (let i = 1; i < directions.length; i++) {
+    const from = directions[i - 1];
+    const to = directions[i];
+    const span = spans[i - 1];
+    const steps = Math.max(1, Math.ceil(span / MAX_STEP));
+
+    for (let s = i === 1 ? 0 : 1; s <= steps; s++) {
+      const local = s / steps;
+      const direction =
+        span < 1e-9 ? from.clone() : from.clone().lerp(to, local).normalize();
+      const t = (travelled + span * local) / total;
+      points.push(direction.multiplyScalar(radius + Math.sin(t * Math.PI) * lift));
+    }
+    travelled += span;
+  }
+  return points;
+}
+
 interface Segment {
   line: Line2;
   material: LineMaterial;
   points: THREE.Vector3[];
 }
 
+/** Supplies a real ground track for a leg, or null to use the plain arc. */
+export type LegPathProvider = (
+  from: RouteStep,
+  to: RouteStep,
+) => readonly (readonly [number, number])[] | null;
+
 export interface RouteLayer {
   group: THREE.Group;
+  /**
+   * Lets the route follow published cable geometry where one exists. Set before
+   * `setRoute`; legs with no cable fall back to the arc.
+   */
+  setLegPathProvider(provider: LegPathProvider | null): void;
   setRoute(route: Route | null): void;
   setStage(index: number): void;
   setResolution(width: number, height: number): void;
@@ -185,6 +240,12 @@ export function createRouteLayer(): RouteLayer {
     packet.visible = false;
   }
 
+  let legPathProvider: LegPathProvider | null = null;
+
+  function setLegPathProvider(provider: LegPathProvider | null): void {
+    legPathProvider = provider;
+  }
+
   function setRoute(route: Route | null): void {
     clear();
     if (!route || route.steps.length < 2) return;
@@ -197,7 +258,14 @@ export function createRouteLayer(): RouteLayer {
       // Satellite legs already stand off the surface; ground legs get a small
       // bulge so they read as arcs rather than painted lines.
       const lift = step.kind === "satellite" || route.steps[i - 1].kind === "satellite" ? 0 : 0.02;
-      const points = arcBetween(positions[i - 1], positions[i], lift);
+
+      // Follow real cable geometry when the provider has some for this leg;
+      // otherwise the great-circle arc, which is what the hub graph implies.
+      const track = legPathProvider?.(route.steps[i - 1], step) ?? null;
+      const points =
+        track && track.length >= 2
+          ? pathAlong(track, radiusFor(step), lift)
+          : arcBetween(positions[i - 1], positions[i], lift);
 
       const geometry = new LineGeometry();
       geometry.setPositions(points.flatMap((point) => [point.x, point.y, point.z]));
@@ -251,7 +319,14 @@ export function createRouteLayer(): RouteLayer {
       const step = route.steps[i];
       const previous = route.steps[i - 1];
       const lift = step.kind === "satellite" || previous.kind === "satellite" ? 0 : 0.045;
-      const leg = arcBetween(positions[i], positions[i - 1], lift);
+      // The reply retraces the request, so it has to take the same cable —
+      // reversed. Drawn on a slightly higher lift so the two stay legible where
+      // they overlap.
+      const track = legPathProvider?.(previous, step) ?? null;
+      const leg =
+        track && track.length >= 2
+          ? pathAlong(track.slice().reverse(), radiusFor(step), lift)
+          : arcBetween(positions[i], positions[i - 1], lift);
       // Drop the duplicated joint so the dash distances stay continuous.
       returnPoints.push(...(returnPoints.length === 0 ? leg : leg.slice(1)));
     }
@@ -340,5 +415,5 @@ export function createRouteLayer(): RouteLayer {
     packet.visible = stageIndex > 0;
   }
 
-  return { group, setRoute, setStage, setResolution, setPixelRatio, setReturnProgress, hopPositions, update };
+  return { group, setLegPathProvider, setRoute, setStage, setResolution, setPixelRatio, setReturnProgress, hopPositions, update };
 }

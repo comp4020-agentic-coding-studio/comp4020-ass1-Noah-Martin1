@@ -46,6 +46,12 @@ export const PALETTE = {
   cableSubmarine: 0x2f6d8f,
   satellite: 0x9fc4ff,
   satelliteActive: 0x8affc1,
+  /**
+   * Orbit rings. Neutral grey on purpose: they used to share the mint of the
+   * active-satellite colour, which read as another traceroute rather than as
+   * the path a satellite sweeps.
+   */
+  orbitTrack: 0xc3ccdb,
   groundStation: 0xc08bff,
   /**
    * Cell towers. Their own hue rather than a reuse: at 91k markers this layer

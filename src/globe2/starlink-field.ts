@@ -178,12 +178,58 @@ export function createStarlinkField(records: readonly { line1: string; line2: st
   const trackAttribute = new THREE.BufferAttribute(trackPositions, 3);
   trackAttribute.setUsage(THREE.DynamicDrawUsage);
   trackGeometry.setAttribute("position", trackAttribute);
+
+  // Position along each ring, 0..1. Fixed for the life of the buffer: every
+  // ring has the same sample count, so a vertex's phase never changes even as
+  // the positions are rewritten for a different satellite.
+  const trackPhases = new Float32Array(MAX_TRACKS * TRACK_SAMPLES * 2);
+  for (let ring = 0; ring < MAX_TRACKS; ring++) {
+    for (let i = 0; i < TRACK_SAMPLES; i++) {
+      const base = (ring * TRACK_SAMPLES + i) * 2;
+      trackPhases[base] = i / TRACK_SAMPLES;
+      trackPhases[base + 1] = (i + 1) / TRACK_SAMPLES;
+    }
+  }
+  trackGeometry.setAttribute("aPhase", new THREE.BufferAttribute(trackPhases, 1));
   trackGeometry.boundingSphere = new THREE.Sphere(new THREE.Vector3(), EARTH_RADIUS_UNITS * 2);
 
-  const trackMaterial = new THREE.LineBasicMaterial({
-    color: PALETTE.satelliteActive,
+  /*
+   * The pulse travels around the ring rather than fading the whole thing in and
+   * out. A global blink reads as "this line is highlighted"; a bright arc
+   * sweeping the loop reads as something going round, which is what an orbit
+   * is. `aPhase` is each vertex's position along its own ring, 0..1.
+   */
+  const trackMaterial = new THREE.ShaderMaterial({
+    uniforms: {
+      uColour: { value: new THREE.Color(PALETTE.orbitTrack) },
+      uOpacity: { value: 0 },
+      uSweep: { value: 0 },
+    },
+    vertexShader: /* glsl */ `
+      attribute float aPhase;
+      varying float vPhase;
+      void main() {
+        vPhase = aPhase;
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+      }
+    `,
+    fragmentShader: /* glsl */ `
+      precision mediump float;
+      uniform vec3 uColour;
+      uniform float uOpacity;
+      uniform float uSweep;
+      varying float vPhase;
+      void main() {
+        // Distance around the loop from the sweep head, wrapped so the band
+        // crosses the seam without a seam.
+        float d = abs(fract(vPhase - uSweep + 0.5) - 0.5);
+        float head = smoothstep(0.16, 0.0, d);
+        float alpha = uOpacity * (0.45 + 0.55 * head);
+        if (alpha < 0.01) discard;
+        gl_FragColor = vec4(uColour, alpha);
+      }
+    `,
     transparent: true,
-    opacity: 0,
     depthWrite: false,
     blending: THREE.AdditiveBlending,
   });
@@ -321,7 +367,10 @@ export function createStarlinkField(records: readonly { line1: string; line2: st
       rebuildTracks();
     }
 
-    trackMaterial.opacity = reducedMotion.value ? 0.32 : 0.18 + 0.22 * (0.5 + 0.5 * Math.sin(pulseSeconds * 2.2));
+    // Steady base brightness with the sweep supplying the motion, so the ring
+    // is always readable and the pulse stays a hint rather than a flash.
+    trackMaterial.uniforms.uOpacity.value = 0.42;
+    trackMaterial.uniforms.uSweep.value = reducedMotion.value ? 0 : (pulseSeconds * 0.22) % 1;
   }
 
   return {
