@@ -6,10 +6,6 @@ function required<T>(value: T | null, message: string): T {
   return value;
 }
 
-const stage = required(document.querySelector<HTMLDivElement>("#globe-stage"), "#globe-stage not found");
-
-const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-
 const TEXTURE_WIDTH = 1024;
 const TEXTURE_HEIGHT = 512;
 const CLOUD_WIDTH = 1024;
@@ -258,7 +254,7 @@ function oceanColor(absLat: number, elevation: number): RGB {
 
 // --- texture builders ---------------------------------------------------------
 
-interface PlanetTextures {
+export interface PlanetTextures {
   colorMap: THREE.Texture;
   normalMap: THREE.Texture;
   roughnessMap: THREE.Texture;
@@ -340,7 +336,7 @@ function buildNormalMap(elevation: Float32Array, mask: Uint8Array, width: number
   for (let y = 0; y < height; y++) {
     const yUp = Math.max(0, y - 1);
     const yDown = Math.min(height - 1, y + 1);
-    const latRad = ((0.5 - y / height) * Math.PI);
+    const latRad = (0.5 - y / height) * Math.PI;
     const cosLat = Math.cos(latRad);
     for (let x = 0; x < width; x++) {
       const i = y * width + x;
@@ -425,7 +421,7 @@ function buildCityLights(mask: Uint8Array, coast: Uint8Array, width: number, hei
   return texture;
 }
 
-function buildPlanetTextures(): PlanetTextures {
+export function buildPlanetTextures(): PlanetTextures {
   const width = TEXTURE_WIDTH;
   const height = TEXTURE_HEIGHT;
   const mask = buildLandMask(width, height);
@@ -439,7 +435,7 @@ function buildPlanetTextures(): PlanetTextures {
   return { colorMap, normalMap, roughnessMap, emissiveMap };
 }
 
-function buildCloudTexture(): THREE.Texture {
+export function buildCloudTexture(): THREE.Texture {
   const width = CLOUD_WIDTH;
   const height = CLOUD_HEIGHT;
   const imageData = new ImageData(width, height);
@@ -465,31 +461,7 @@ function buildCloudTexture(): THREE.Texture {
   return texture;
 }
 
-function buildStarfield(): THREE.Points {
-  const random = mulberry32(9001);
-  const starCount = 900;
-  const positions = new Float32Array(starCount * 3);
-  for (let i = 0; i < starCount; i++) {
-    const theta = random() * Math.PI * 2;
-    const phi = Math.acos(2 * random() - 1);
-    const r = 40 + random() * 20;
-    positions[i * 3] = r * Math.sin(phi) * Math.cos(theta);
-    positions[i * 3 + 1] = r * Math.sin(phi) * Math.sin(theta);
-    positions[i * 3 + 2] = r * Math.cos(phi);
-  }
-  const geometry = new THREE.BufferGeometry();
-  geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
-  const material = new THREE.PointsMaterial({
-    color: 0xffffff,
-    size: 0.13,
-    sizeAttenuation: true,
-    transparent: true,
-    opacity: 0.85,
-  });
-  return new THREE.Points(geometry, material);
-}
-
-function buildAtmosphere(radius: number): THREE.Mesh {
+export function buildAtmosphere(radius: number): THREE.Mesh {
   const geometry = new THREE.SphereGeometry(radius * 1.025, 48, 32);
   const material = new THREE.ShaderMaterial({
     uniforms: {
@@ -525,163 +497,25 @@ function buildAtmosphere(radius: number): THREE.Mesh {
   return new THREE.Mesh(geometry, material);
 }
 
-// --- scene setup --------------------------------------------------------------
-
-const scene = new THREE.Scene();
-const camera = new THREE.PerspectiveCamera(45, 1, 0.1, 100);
-camera.position.set(0, 0, 4.5);
-
-let renderer: THREE.WebGLRenderer;
-try {
-  renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
-} catch {
-  stage.textContent = "This browser can't display the WebGL globe.";
-  throw new Error("WebGL unavailable");
-}
-renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-stage.appendChild(renderer.domElement);
-
-const sphereRadius = 1.6;
-const globeGroup = new THREE.Group();
-
-const { colorMap, normalMap, roughnessMap, emissiveMap } = buildPlanetTextures();
-
-const worldMesh = new THREE.Mesh(
-  new THREE.SphereGeometry(sphereRadius, 96, 64),
-  new THREE.MeshStandardMaterial({
-    map: colorMap,
-    normalMap,
-    normalScale: new THREE.Vector2(0.85, 0.85),
-    roughnessMap,
-    roughness: 1,
-    metalness: 0,
-    emissiveMap,
-    emissive: new THREE.Color(0xffffff),
-    emissiveIntensity: 0.5,
-  }),
-);
-globeGroup.add(worldMesh);
-
-const cloudMesh = new THREE.Mesh(
-  new THREE.SphereGeometry(sphereRadius * 1.018, 64, 48),
-  new THREE.MeshBasicMaterial({ map: buildCloudTexture(), transparent: true, depthWrite: false }),
-);
-globeGroup.add(cloudMesh);
-
-scene.add(globeGroup);
-scene.add(buildAtmosphere(sphereRadius));
-scene.add(buildStarfield());
-
-const sunLight = new THREE.DirectionalLight(0xfff2df, 2.6);
-sunLight.position.set(5, 2.2, 3.4);
-scene.add(sunLight);
-
-const fillLight = new THREE.HemisphereLight(0x9fb8ff, 0x14161f, 0.4);
-scene.add(fillLight);
-
-// --- interaction (drag, inertia, idle auto-rotate) -----------------------------
-
-const orientation = new THREE.Quaternion();
-const worldX = new THREE.Vector3(1, 0, 0);
-const worldY = new THREE.Vector3(0, 1, 0);
-const dragSensitivity = 0.006;
-const inertiaDamping = 0.94;
-const inertiaEpsilon = 0.00005;
-const idleDelayMs = 1200;
-const idleRampMs = 900;
-const autoRotateSpeed = 0.00035;
-const cloudDriftSpeed = 0.00006;
-
-let isDragging = false;
-let lastPointerX = 0;
-let lastPointerY = 0;
-let velocityYaw = 0;
-let velocityPitch = 0;
-let lastInteractionTime = performance.now();
-let autoRotateBlend = 0;
-
-function applyRotation(yaw: number, pitch: number): void {
-  const qYaw = new THREE.Quaternion().setFromAxisAngle(worldY, -yaw);
-  const qPitch = new THREE.Quaternion().setFromAxisAngle(worldX, -pitch);
-  orientation.premultiply(qYaw);
-  orientation.premultiply(qPitch);
-  globeGroup.quaternion.copy(orientation);
-}
-
-function onPointerDown(event: PointerEvent): void {
-  isDragging = true;
-  velocityYaw = 0;
-  velocityPitch = 0;
-  autoRotateBlend = 0;
-  lastPointerX = event.clientX;
-  lastPointerY = event.clientY;
-  stage.classList.add("dragging");
-  renderer.domElement.setPointerCapture(event.pointerId);
-}
-
-function onPointerMove(event: PointerEvent): void {
-  if (!isDragging) return;
-  const dx = event.clientX - lastPointerX;
-  const dy = event.clientY - lastPointerY;
-  lastPointerX = event.clientX;
-  lastPointerY = event.clientY;
-  const yaw = dx * dragSensitivity;
-  const pitch = dy * dragSensitivity;
-  applyRotation(yaw, pitch);
-  velocityYaw = yaw;
-  velocityPitch = pitch;
-}
-
-function endDrag(): void {
-  isDragging = false;
-  stage.classList.remove("dragging");
-  lastInteractionTime = performance.now();
-}
-
-renderer.domElement.addEventListener("pointerdown", onPointerDown);
-renderer.domElement.addEventListener("pointermove", onPointerMove);
-renderer.domElement.addEventListener("pointerup", endDrag);
-renderer.domElement.addEventListener("pointercancel", endDrag);
-
-const resizeObserver = new ResizeObserver(() => {
-  const width = stage.clientWidth;
-  const height = stage.clientHeight;
-  if (width === 0 || height === 0) return;
-  camera.aspect = width / height;
-  camera.updateProjectionMatrix();
-  renderer.setSize(width, height, false);
-});
-resizeObserver.observe(stage);
-
-let lastFrameTime = performance.now();
-
-function animate(): void {
-  requestAnimationFrame(animate);
-  const now = performance.now();
-  const dt = now - lastFrameTime;
-  lastFrameTime = now;
-
-  if (!isDragging && !reducedMotion) {
-    if (Math.abs(velocityYaw) > inertiaEpsilon || Math.abs(velocityPitch) > inertiaEpsilon) {
-      applyRotation(velocityYaw, velocityPitch);
-      velocityYaw *= inertiaDamping;
-      velocityPitch *= inertiaDamping;
-    } else {
-      velocityYaw = 0;
-      velocityPitch = 0;
-      const idleFor = now - lastInteractionTime;
-      if (idleFor > idleDelayMs) {
-        autoRotateBlend = Math.min(1, autoRotateBlend + dt / idleRampMs);
-        applyRotation(autoRotateSpeed * dt * autoRotateBlend, 0);
-      }
-    }
+export function buildStarfield(count = 1400): THREE.Points {
+  const random = mulberry32(9001);
+  const positions = new Float32Array(count * 3);
+  for (let i = 0; i < count; i++) {
+    const theta = random() * Math.PI * 2;
+    const phi = Math.acos(2 * random() - 1);
+    const r = 40 + random() * 20;
+    positions[i * 3] = r * Math.sin(phi) * Math.cos(theta);
+    positions[i * 3 + 1] = r * Math.sin(phi) * Math.sin(theta);
+    positions[i * 3 + 2] = r * Math.cos(phi);
   }
-
-  if (!reducedMotion) {
-    cloudMesh.rotation.y += cloudDriftSpeed * dt;
-  }
-
-  renderer.render(scene, camera);
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
+  const material = new THREE.PointsMaterial({
+    color: 0xffffff,
+    size: 0.13,
+    sizeAttenuation: true,
+    transparent: true,
+    opacity: 0.85,
+  });
+  return new THREE.Points(geometry, material);
 }
-
-animate();

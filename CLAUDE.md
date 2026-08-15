@@ -1,162 +1,739 @@
-# COMP4020 prototype
+# CLAUDE.md
 
-This is your starter repo for a COMP4020 prototype: a static site written in
-HTML/CSS/TypeScript that builds to plain HTML/CSS/JS and deploys to GitHub
-Pages. The **deployed site is what gets marked** --- not this repo, and not "it
-works on my machine". It's marked live in Chrome against the deployed URL at two
-viewports --- 1920×1080 (desktop) and 390×844 (phone) --- and both count in
-full, so make that artefact good at both and use the checks below to know
-whether it is.
+# COMP4020 Prototype
 
-What you're building this week — the spec — is published on the course website,
-and this repo's name tells you which deliverable it is. Run the course plugin's
-**start** skill at the start of each week: it pulls the right spec from the
-course API, carries your harness forward from last week, and helps you turn the
-spec's checkable lines into tests of your own. Read the spec before you build,
-and see `spec/README.md` for how the checks in this repo relate to it.
+This project is Assignment 1 for COMP4020 Agentic Coding Studio.
+
+The website is an interactive educational visualisation of how an internet request can travel from a user's location to a server somewhere else in the world.
+
+The prototype is marked live in Chrome against the deployed URL at:
+
+- Desktop: `1920×1080`
+- Mobile: `390×844`
+
+Both viewports count fully. The website must therefore be designed and tested deliberately for both sizes.
+
+---
+
+# Project
+
+## Purpose
+
+The website should help users who do not understand computer networks develop an intuitive understanding of how an internet request travels through different types of infrastructure.
+
+The central experience is an interactive 3D globe. The user chooses where a request originates and where it is going, and the website then visually guides them through the journey of that request.
+
+The experience should answer questions such as:
+
+- Where does my internet request start?
+- How does it leave my local area?
+- What infrastructure does it travel through?
+- What is a 5G tower doing?
+- What are fibre-optic cables?
+- What are servers and data centres?
+- What happens when a request uses satellites?
+- How can a request travel between continents?
+- What does a traceroute actually show?
+- Why might different requests take different routes?
+
+The website is primarily an **educational visualisation**, rather than a networking diagnostic tool.
+
+Routes shown by the prototype may be fictionalised, but they should be based on plausible infrastructure and real-world network behaviour. Do not present fictional routes as exact real-time packet routes.
+
+---
+
+# Core Interaction
+
+The main experience should revolve around a globe in the centre of the page.
+
+The user should be able to:
+
+- Rotate the globe.
+- Zoom in and out.
+- Select an origin location.
+- Select a destination.
+- Choose between a specific route and a random route.
+- Toggle Starlink on or off.
+- Progress through the route by scrolling.
+- Learn something at every major step of the journey.
+- Toggle infrastructure layers/highlights.
+
+The main heading is:
+
+> Visualise your internet requests
+
+The default state should be simple and visually calm rather than immediately displaying every possible infrastructure layer.
+
+---
+
+# Traceroute Modes
+
+There are two primary modes.
+
+## Starlink OFF
+
+When Starlink is disabled, the request should be visualised using conventional terrestrial/mobile internet infrastructure.
+
+The conceptual path is:
+
+`User → 5G tower → fibre/network infrastructure → destination network → server`
+
+This does not need to represent every physical router. The purpose is to communicate the major stages of the journey.
+
+### Origin selection
+
+The user should be able to select a location on the globe.
+
+The prototype may assume that most populated areas have mobile coverage.
+
+Areas that are extremely remote, uninhabited, ocean, Antarctica, or otherwise unsuitable for the simplified 5G model should be unavailable or visually greyed out.
+
+Avoid implying that every point on Earth genuinely has 5G coverage.
+
+### 5G
+
+If the selected origin is not directly associated with a major city, assume the request first reaches a nearby 5G tower.
+
+5G towers may use:
+
+- Real tower locations where suitable public data is available.
+- A simplified distribution of towers across populated regions when exact data is unavailable.
+
+The visualisation should prioritise clarity over geographic precision.
+
+The wireless portion of the route should be visually distinct from fibre.
+
+For example:
+
+`device → ))) → 5G tower → fibre`
+
+The radio-wave animation should make it immediately understandable that this section of the journey is wireless.
+
+### Fibre
+
+Fibre-optic infrastructure should form the main long-distance terrestrial and undersea network.
+
+The visualisation should use simple glowing lines rather than trying to display every individual cable.
+
+Where possible, use realistic major cable routes and network connections.
+
+The route should favour major network hubs and server locations rather than appearing to connect arbitrary points directly.
+
+---
+
+# Starlink ON
+
+When Starlink is enabled, the experience should introduce satellites as another layer of the network.
+
+The conceptual path is:
+
+`User → Starlink satellite → satellite(s) → Starlink ground station → terrestrial network → server`
+
+The visualisation should communicate that a Starlink request can move through multiple satellites before reaching a ground station.
+
+It should not imply that every Starlink request follows exactly the same route.
+
+## Satellite display
+
+The globe should display Starlink satellites as small points surrounding Earth.
+
+Satellite positions do not need to be live.
+
+Use publicly available orbital information where practical, but prioritise a visually believable distribution of satellites.
+
+The satellites should:
+
+- Be distributed around Earth rather than clustered.
+- Have different orbital positions.
+- Move independently rather than appearing perfectly synchronised.
+- Orbit at approximately `10×` real-time speed for the visualisation.
+
+The purpose of the accelerated motion is to make orbital movement visible to the user.
+
+## Satellite selection
+
+When the user selects an origin location, the visualisation should simplify the satellite layer so that only satellites relevant to that location remain prominent.
+
+The selected location should determine which satellites are considered visible/usable in the simplified model.
+
+The remaining satellites should continue moving at the accelerated rate.
+
+## Starlink ground stations
+
+When a Starlink route is being visualised, relevant Starlink ground stations should become visible.
+
+The route should communicate:
+
+`origin → satellite → satellite → ground station → terrestrial network`
+
+Do not draw arbitrary satellite-to-satellite connections simply for visual effect. Connections should represent the conceptual path being explained.
+
+---
+
+# Random Route
+
+The user should be able to choose a random route.
+
+A random route should select:
+
+- A plausible origin.
+- A plausible destination.
+- Appropriate infrastructure for that route.
+
+When Starlink is disabled, the random route should use the conventional network model.
+
+When Starlink is enabled, the random route should include an appropriate satellite-based section.
+
+Random routes should remain understandable and geographically plausible.
+
+Do not randomly select locations that make the visualisation impossible to explain.
+
+---
+
+# Scroll-Based Storytelling
+
+The traceroute should progress as the user scrolls.
+
+Scrolling is not simply page navigation. It is part of the visualisation.
+
+Each major scroll stage should:
+
+1. Move/highlight the route to the next node.
+2. Visually emphasise the relevant infrastructure.
+3. Explain what is happening.
+4. Provide a useful networking fact.
+5. Maintain the user's understanding of where the request currently is.
+
+For example:
+
+### Stage 1 — Your device
+
+Explain that the request begins on the user's device.
+
+### Stage 2 — Wireless connection
+
+Explain that the device communicates with a nearby cellular tower using radio.
+
+### Stage 3 — Fibre network
+
+Explain that long-distance internet traffic is predominantly carried through fibre-optic infrastructure.
+
+### Stage 4 — Network hubs
+
+Explain that traffic passes through interconnected networks and routing infrastructure.
+
+### Stage 5 — Undersea cable
+
+If the route crosses an ocean, explain that continents are connected by submarine fibre-optic cables.
+
+### Stage 6 — Server/data centre
+
+Explain that the request eventually reaches the network hosting the requested service.
+
+The exact stages should change depending on the route.
+
+---
+
+# Educational Content
+
+Educational information is a core feature, not decoration.
+
+Every major route step should teach the user something.
+
+Information should be:
+
+- Accurate.
+- Concise.
+- Easy for a non-technical user to understand.
+- Directly connected to what is currently happening on the globe.
+
+Avoid large blocks of networking terminology without explanation.
+
+When technical terminology is necessary, explain it in plain language.
+
+Important concepts that may be introduced include:
+
+- IP addresses.
+- Packets.
+- Routers.
+- Routing.
+- Autonomous systems.
+- ISP networks.
+- 5G.
+- Radio access networks.
+- Fibre optics.
+- Submarine cables.
+- Internet exchange points.
+- Data centres.
+- Servers.
+- Latency.
+- Ping.
+- Traceroute.
+- Satellites.
+- Starlink ground stations.
+- Inter-satellite links.
+
+The educational content should progressively become more technical rather than overwhelming the user immediately.
+
+---
+
+# Visual Direction
+
+The overall visual language should be:
+
+**Modern vector + technical + spatial + atmospheric.**
+
+The design should feel like an interactive network map rather than a conventional corporate website.
+
+## Globe
+
+The globe is the primary visual element.
+
+It should:
+
+- Be dark blue.
+- Have light-coloured continents.
+- Have subtle glowing outlines.
+- Remain visually dominant.
+- Feel clean and vector-like.
+- Have enough contrast that network paths remain visible.
+
+The globe should be centred prominently when the site starts.
+
+Avoid filling the globe with excessive labels and infrastructure immediately.
+
+## Background
+
+The background should represent space.
+
+Use:
+
+- Dark space.
+- Stars.
+- A subtle Milky Way/nebula treatment where appropriate.
+- A sun.
+- A moon.
+
+The background should remain secondary to the globe.
+
+Stars should move subtly as the globe rotates to reinforce the sense that the Earth exists in space.
+
+Do not make the background so bright or detailed that it competes with the network visualisation.
+
+## Idle animation
+
+When the user is not interacting:
+
+- The Earth may rotate slowly.
+- Stars should move subtly.
+- Satellites should continue orbiting.
+- Animations should remain calm.
+
+Do not create constant aggressive movement.
+
+---
+
+# Infrastructure Visual Language
+
+Different infrastructure types should be visually distinguishable.
+
+Use consistent visual conventions throughout the application.
+
+## Fibre-optic cables
+
+Represent with:
+
+- Thin glowing lines.
+- Clear geographic paths.
+- Subtle animation when active.
+
+Fibre should normally be visible at low intensity.
+
+## 5G towers
+
+Represent with:
+
+- Small tower markers.
+- A subtle glow.
+- Radio-wave animation when the request reaches a tower.
+
+5G towers should not cover the entire globe with thousands of markers.
+
+## Starlink satellites
+
+Represent with:
+
+- Small bright dots.
+- Motion around Earth.
+- Greater prominence when Starlink mode is active.
+
+## Starlink ground stations
+
+Represent with:
+
+- Distinct markers from normal servers.
+- A visible connection to the active satellite route.
+
+## Major servers
+
+Represent major server/data-centre locations with glowing city/network markers.
+
+Major locations should be visible but not overpowering.
+
+## Cities
+
+Major cities should appear as subtle sparkling/glowing points.
+
+They should help users understand geography without turning the globe into a wall of labels.
+
+---
+
+# Infrastructure Controls
+
+The interface should provide sliders/toggles that control infrastructure highlighting.
+
+Users should be able to highlight:
+
+- Fibre-optic cables.
+- 5G towers.
+- Starlink ground stations.
+- Major servers.
+
+These controls should change visual emphasis rather than completely destroying the underlying map.
+
+For example:
+
+- Off = infrastructure remains subtle.
+- On = infrastructure becomes brighter/more prominent.
+
+The Starlink mode itself should use a clear on/off control.
+
+Starlink should be **OFF by default**.
+
+This is important because the default experience should not initially overwhelm the user with hundreds of satellites.
+
+---
+
+# Interaction Design
+
+The interface should always make the current state understandable.
+
+The user should know:
+
+1. Which mode they are using.
+2. Where the request starts.
+3. Where it is going.
+4. What infrastructure is currently being used.
+5. What stage of the journey they are viewing.
+6. What they have just learned.
+
+Avoid hidden interactions that require the user to guess what to do.
+
+Selection states should be obvious.
+
+When selecting a location:
+
+- The selected location should glow.
+- The globe should remain oriented around the selection where appropriate.
+- Invalid areas should be visually unavailable.
+- The interface should provide clear feedback.
+
+---
+
+# Mobile
+
+The mobile viewport is `390×844` and must be treated as a first-class layout.
+
+Do not simply shrink the desktop design.
+
+On mobile:
+
+- The globe remains the primary element.
+- Controls should be compact.
+- Text should remain readable.
+- Interactive controls must be easy to tap.
+- Scroll-driven storytelling must still work.
+- UI panels should not cover the globe unnecessarily.
+- Satellite visualisation must remain performant and understandable.
+
+Avoid hover-only interactions.
+
+Anything essential must work with touch.
+
+---
+
+# Accessibility
+
+Accessibility is part of the prototype quality.
+
+Do not communicate information only through colour.
+
+Interactive elements should have:
+
+- Accessible names.
+- Keyboard support where appropriate.
+- Visible focus states.
+- Sufficient contrast.
+- Clear selected/unselected states.
+
+Animations should respect `prefers-reduced-motion`.
+
+The visualisation can be highly animated, but users should have a reduced-motion experience that remains understandable.
+
+---
+
+# Technical Principles
+
+## Prefer real data where it improves authenticity
+
+Use public datasets where they provide meaningful value, especially for:
+
+- Starlink orbital information.
+- Major cities.
+- Major server/data-centre locations.
+- Submarine cable routes.
+- Starlink ground stations.
+
+However, do not allow data acquisition to dominate the project.
+
+When accurate data is unavailable, use a clearly simplified model.
+
+The goal is an educational visualisation, not a complete replica of the global internet.
+
+## Avoid fake precision
+
+Do not display extremely precise-looking information when the underlying data is fictional or simplified.
+
+For example, if a fibre route is an approximation, the interface should not imply that the displayed line represents the exact physical path of a specific packet.
+
+Similarly, fictional traceroutes should not be presented as live packet captures.
+
+## Performance
+
+The globe and animation should remain responsive.
+
+Be careful with:
+
+- Large numbers of DOM elements.
+- Excessive SVG paths.
+- Continuous expensive calculations.
+- High-resolution textures.
+- Hundreds/thousands of independently animated elements.
+
+Prefer efficient rendering techniques where appropriate.
+
+If using WebGL/Three.js or another 3D rendering system, keep rendering architecture organised and avoid unnecessary per-frame work.
+
+---
+
+# Code Organisation
+
+Keep the code organised around clear responsibilities.
+
+Prefer separating:
+
+- Globe rendering.
+- Camera/interaction controls.
+- Route data.
+- Geographic data.
+- Satellite simulation.
+- Infrastructure rendering.
+- Scroll progression.
+- Educational content.
+- UI controls.
+- Application state.
+
+Do not put the entire visualisation into one giant component/file.
+
+Route data should be represented as structured data rather than hard-coded directly into rendering logic where practical.
+
+For example, a route step should conceptually contain:
+
+- Node type.
+- Geographic location.
+- Infrastructure type.
+- Display title.
+- Explanation.
+- Educational fact.
+- Visual behaviour.
+
+This makes the educational narrative easier to expand.
+
+---
+
+# Accuracy Guidelines
+
+The following distinctions are important.
+
+### Traceroute
+
+Traceroute identifies network hops by sending packets with increasing TTL values and observing responses from intermediate network devices.
+
+It does **not** provide a complete physical map of the internet.
+
+The website should therefore describe the visualised route as a simplified physical/network interpretation.
+
+### Fibre
+
+Fibre-optic cables carry enormous quantities of internet traffic over long distances using light.
+
+They are the primary infrastructure for long-distance terrestrial and submarine internet connectivity.
+
+### 5G
+
+5G is a radio access technology connecting devices to cellular networks.
+
+After the wireless connection, traffic generally enters the operator's wired network.
+
+### Starlink
+
+Starlink uses low-Earth-orbit satellites to provide connectivity.
+
+Depending on the network configuration and available infrastructure, traffic may use satellite-to-satellite links and ground stations.
+
+Do not imply that every Starlink connection follows the exact same path.
+
+---
+
+# Development Workflow
+
+- Keep the dev server running with `pnpm dev`.
+- Inspect the rendered page frequently.
+- Test both `1920×1080` and `390×844`.
+- Use browser tooling when available.
+- The rendered page is the source of truth.
+- Do not assume something looks correct because the code appears correct.
+- Before pushing, run `pnpm check`.
+- Fix the actual cause of failed checks rather than suppressing the check.
+- Commit frequently in small logical changes.
+- Never commit a known broken state.
+
+When changing the visualisation, check:
+
+1. Desktop layout.
+2. Mobile layout.
+3. Globe interaction.
+4. Scroll progression.
+5. Animation performance.
+6. Accessibility.
+7. Build.
+8. Tests.
+
+---
+
+# Design Rules for the Agent
+
+When implementing new features:
+
+### Do
+
+- Preserve the central globe as the visual focus.
+- Prefer subtle visual hierarchy.
+- Use animation to explain network behaviour.
+- Make interactions discoverable.
+- Keep educational content connected to the current visual state.
+- Make desktop and mobile layouts intentionally different where necessary.
+- Use realistic geographic relationships.
+- Reuse established visual conventions.
+- Keep the interface visually clean.
+
+### Do not
+
+- Turn the website into a generic dashboard.
+- Cover the globe with excessive panels.
+- Add unnecessary cards everywhere.
+- Use random decorative animations without purpose.
+- Add hundreds of labels that obscure geography.
+- Present fictional network routes as live factual traceroutes.
+- Claim data is real-time when it is not.
+- Make Starlink the default visual state.
+- Sacrifice mobile usability for desktop aesthetics.
+- Add a feature merely because it is technically interesting if it makes the educational experience harder to understand.
+
+---
+
+# Prototype Priorities
+
+When trade-offs are necessary, prioritise in this order:
+
+1. The globe and core interaction work.
+2. The route can be selected and visualised.
+3. Scroll-driven storytelling works.
+4. The educational explanations are clear.
+5. The visual hierarchy is strong.
+6. Desktop and mobile both work.
+7. Infrastructure visualisations are believable.
+8. Starlink mode works.
+9. Additional realism/data is added.
+10. Decorative polish.
+
+A smaller, coherent and understandable visualisation is better than a technically ambitious but confusing prototype.
+
+---
+
+# COMP4020 Process Requirements
 
 ## How to work in here
 
 - Keep the dev server running (`pnpm dev`) so you see changes as you make them.
-- Before you push, run `pnpm check`. It runs most of what CI runs --- build,
-  lint, and the spec --- so you catch those in seconds instead of waiting for
-  the pipeline. The links check, the evidence check, the secrets scan, and the
-  deploy itself only run in CI; run `pnpm dlx linkinator ./dist --silent`
-  locally against a fresh `pnpm build` for the links check without waiting for
-  CI.
-- To see what the page actually looks like rather than what you assume it looks
-  like, open it in a browser (the `agent-browser` CLI, documented on
-  [the course site](https://comp.anu.edu.au/courses/comp4020-agentic-coding-studio/topics/backpressure/#agent-browser-the-rendered-page-as-ground-truth),
-  works well for this). The rendered page is the truth; your mental model of it
-  isn't.
-- When a check fails, read its output before changing anything. Each check below
-  names what it measures, and the failure message is the instruction: it tells
-  you the file, the line, or the contract. Treat a red check as authoritative
-  --- the page is wrong until the check is green, not until you decide it should
-  be.
-- Commit when the checks pass. Never commit a red state.
+- Before you push, run `pnpm check`.
+- Use `pnpm dlx linkinator ./dist --silent` after a fresh `pnpm build` when checking links locally.
+- Open the rendered page in a browser when visual behaviour matters.
+- Treat the rendered page as the source of truth.
+- When a check fails, read its output before changing anything.
+- Never commit a red state.
 
-## The checks (your sensors)
+## The checks
 
-CI runs these on every push once your repo is public. GitHub's checks UI shows
-two jobs, `check` and `deploy` --- not one status per sensor below --- and
-within `check` the steps run in sequence (`pnpm check` chains typecheck, build,
-lint, and the spec with `&&`), so an early failure like a broken build stops the
-later sensors from running for that push; fix it and push again to see the rest.
-While the repo is private (all week, until you ship) the CI jobs stay skipped
---- `pnpm check` is the same roster on your machine, and it's the faster loop
-anyway. They aren't hoops. Each is a different way of finding out something true
-about the site that you can't reliably see by looking at it.
+CI runs:
 
-They also carry a mark at a crit: the sweep runs fifteen minutes after your
-cutoff, and green checks there are worth half that week's shipped mark. Still
-running counts as not green, so ship with time for CI to finish.
+- typecheck
+- build
+- deploy/online
+- spec
+- lint
+- tests
+- evidence
+- links
+- secrets
 
-- **typecheck** --- `tsc --noEmit` runs first in `pnpm check`, so a type error
-  stops the roster before the build even starts. The types are extra
-  backpressure: a red here is the compiler telling you a claim in the code is
-  false.
-- **build** --- the site must build (`pnpm build`). A build failure means the
-  deployed site is broken or stale, so nothing else matters until this is green.
-- **deploy / online** --- the live GitHub Pages URL must load and return the
-  page you expect. An asset that 404s on the deployed URL counts as broken even
-  if it loads locally.
-- **spec** --- `spec/invariants.test.ts` asserts what's true of any good
-  website, whatever the week's brief asks; the tests you write for the week's
-  own spec run alongside it (any `spec/*.test.ts`). A failure names the contract
-  you haven't met yet.
-- **lint** --- `stylelint` for CSS, `oxlint` for TypeScript. Flags code that's
-  wrong, fragile, or non-idiomatic. Read the rule it names.
-- **tests** --- any other tests you write, wherever you put them (co-located
-  with your source is fine, not just `spec/`), must pass. Vitest picks up both
-  this and the spec suite in one `vitest run`, the last step of `pnpm check`. A
-  failing test is a claim about the site that's no longer true.
-- **evidence** (`pnpm check:evidence`) --- checks your process evidence:
-  `PROCESS.md`'s citations resolve to real commits, the current deliverable's
-  exact reflection is in `reflections/` (worked out from this repo's name
-  against the public course API), and your `CLAUDE.md` is present. Evidence
-  gates the deploy --- `deploy` needs `check` to pass, so failing evidence
-  blocks the deploy alongside everything else. See
-  [Your process is part of the mark](#your-process-is-part-of-the-mark) below,
-  and the course website's
-  [assessment page](https://comp.anu.edu.au/courses/comp4020-agentic-coding-studio/topics/assessment/#what-you-submit)
-  for what counts as evidence.
-- **links** --- internal links must resolve. A broken link is a dead end you
-  didn't mean to ship.
-- **secrets** --- the repo is scanned for committed credentials. Never put a
-  key, token, or password in a tracked file. If one leaks, rotate it. A local
-  pre-commit hook (`.githooks/pre-commit`, installed by `pnpm install`) also
-  blocks any commit containing something shaped like an API key --- by the time
-  CI sees a key it's already pushed, so the hook is the sensor that matters.
+`pnpm check` is the main local verification command.
 
-Nothing here measures **accessibility** or **performance** --- wiring those
-sensors (`axe-core`, Lighthouse, or whatever you choose) is your work, and later
-in the course the spec will ask you to show how you tested both. When you do,
-read a green performance result honestly: it's a lab estimate from one run on a
-CI machine, not proof the site is fast for real users.
+Do not weaken, remove, or bypass checks simply to make the project pass.
 
-## The stack is swappable
+---
 
-Out of the box this is plain HTML/CSS/TypeScript on Vite, and every `.html` file
-in the repo is a page: add pages, link them, and the build picks them up with no
-config. That's a default, not a rule (unless the week's spec says otherwise).
-You can swap in Astro or any other static generator, because nothing in CI names
-a tool --- the whole contract is:
+# Your Process Is Part of the Mark
 
-- `pnpm build` emits the complete site into `dist/`
-- the `package.json` scripts (`check`, `check:evidence`, `build`) keep working
-- whatever lands in `dist/` still passes the invariants in `spec/`
+Commit as you go.
 
-Two things bite in a swap. The deployed site lives under a path
-(`…github.io/<repo>/`), so configure your generator's base path --- this
-template's Vite config uses relative asset URLs to sidestep that, but most
-generators (Astro included) need `base` set explicitly, and getting it wrong
-looks fine locally while every asset 404s on the live URL. And commit the
-updated `pnpm-lock.yaml`: CI installs with `--frozen-lockfile`.
+Use small, meaningful commits that show how the project developed.
 
-## Your process is part of the mark
+Maintain:
 
-The deployed page is only half of it. How you got there is marked too: your
-commit history, your agent files, and the decisions visible across them. The
-checks above can't see any of that, so a person reads it directly --- which
-means building legibly is part of building well.
+- `PROCESS.md`
+- `reflections/`
+- `CLAUDE.md`
 
-- **Commit as you go.** Small, frequent commits are the record of how the work
-  came together, and that record is read, not just the final state. A trail that
-  grew alongside the code is the strongest evidence of your process; a single
-  dump the night before is the weakest.
-- **Keep a process overview** (`PROCESS.md`). A short reading-guide, not an
-  essay: what you built, the moments that mattered --- each pointing at a
-  commit, a `CLAUDE.md` change, or a prompt and the commit it produced --- and
-  where to look in the history. It points a marker at the evidence; it doesn't
-  stand in for it, and claims the history doesn't back don't count. The
-  `PROCESS.md` in this repo is a template showing the shape and the citation
-  format (link text the commit hash or range, target the commit or compare URL);
-  `pnpm check:evidence` verifies your citations resolve to real commits before
-  you ship. Markers follow those citations and don't trawl the repo for evidence
-  you didn't cite.
-- **Write your reflection in `reflections/`** --- a short markdown file in this
-  repo, named for the deliverable it answers, so the number in the filename is
-  the number in this repo's name (`crit-1.md` in `comp4020-crit1-<you>`,
-  `assignment-1.md` in `comp4020-ass1-<you>`); `reflections/README.md` has the
-  full rule. `pnpm check:evidence` checks the exact current name against the
-  course API, not merely the presence of any well-named file. It answers the two
-  standing prompts: the breakthrough that moved the work forward, and what this
-  work changed about the developer you want to be. It stays out of the deployed
-  site. It's due at the cutoff, and if it isn't in the repo by then the week
-  doesn't count as shipped, however good the prototype is.
-- **This file is process evidence.** The harness you build to direct the agent,
-  this `CLAUDE.md` and any `AGENTS.md`, is itself read as part of how you
-  worked. Keep it honest and current (see below).
+The process history is part of the assessment.
 
-You don't need a name, a student number, or any identity file in the repo: we
-know whose repo it is. Spend the effort on the work.
+`PROCESS.md` should act as a reading guide to how the work came together rather than an essay.
 
-## This file is yours
+The reflection should explain:
 
-This CLAUDE.md is a starting point, not a fixed rulebook. As you learn what your
-prototype needs --- a convention to hold the agent to, a sensor that keeps
-catching you out, a fact about the stack the agent keeps getting wrong --- write
-it down here. Growing this file is the work of harness engineering, and the gap
-between this boilerplate and your own version is part of what your prototype
-says about the developer you're becoming.
+- The breakthrough that moved the work forward.
+- What the work changed about the developer you want to become.
+
+Do not fabricate process evidence after the fact.
+
+---
+
+# This File Is Living Documentation
+
+Update this `CLAUDE.md` when the project develops a recurring convention, constraint, architectural decision, or lesson that future agent work should know.
+
+Do not allow this file to become a generic description of the website.
+
+It should increasingly describe **how this specific project should be built** and the decisions that keep the implementation coherent.
+
+When an implementation decision becomes important enough that the agent should not repeatedly rediscover it, document it here.

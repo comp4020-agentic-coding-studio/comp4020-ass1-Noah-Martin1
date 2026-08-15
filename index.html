@@ -3,23 +3,35 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>COMP4020 prototype</title>
+    <title>Visualise your internet requests</title>
+    <meta
+      name="description"
+      content="An interactive 3D globe that shows how an internet request travels from your device to a server, over 5G/fibre or Starlink."
+    />
     <link rel="stylesheet" href="./styles.css" />
   </head>
   <body>
-    <header>
+    <a class="skip-link" href="#story-host">Skip to route explanation</a>
+    <header class="site-header">
+      <h1>Visualise your internet requests</h1>
       <nav aria-label="Primary">
         <a href="./" aria-current="page">Home</a>
-        <a href="./globe.html">Globe</a>
       </nav>
     </header>
-    <main>
-      <h1>COMP4020 prototype</h1>
-      <p data-testid="intro">
-        Replace this with your prototype. This week's brief is on the course website;
-        <code>spec/README.md</code> explains how the checks in this repo relate to it.
-      </p>
+    <main class="experience">
+      <section class="globe-column" aria-label="Globe">
+        <div
+          id="globe-stage"
+          role="img"
+          aria-label="Interactive 3D globe of Earth at night, with city lights, drifting clouds and a starfield. Drag to rotate, scroll or pinch to zoom, and tap a populated location to select it as a request's origin or destination."
+        >
+          <div class="gloss" aria-hidden="true"></div>
+        </div>
+        <p class="hint">Drag to rotate · scroll to zoom · tap a city to select it</p>
+        <div id="control-panel-host"></div>
+      </section>
+      <aside id="story-host" aria-label="Journey of the request"></aside>
     </main>
-    <script type="module" src="./main.ts"></script>
+    <script type="module" src="./src/main.ts"></script>
   </body>
 </html>
