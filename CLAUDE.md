@@ -45,7 +45,9 @@ Routes shown by the prototype may be fictionalised, but they should be based on 
 # Core Interaction - the website MUST follow this flow:
 
 
-load website, globe centered, starlink enabled, -> visually we see the globe slowly spinning with milky way and stars behind it. The satellites are orbittingat 10x their real speed. We see a prompt box asking us to select a loaction to send internet request. we hover our cursor over the the earth, in locations where starlink is avaliable (to send request from) there is a small green circle under the cursor to indicate where youre going to select the first location. If the circle is red a prompt near your cursor will say “sorry! no connection here”. After selecting the senf from location and starlink is selected, make all the satellites not orbiting over the send location dissapear, and the ones that orbit over the loaction, have their orbit line appear in a faint way, pulsing to show their orbit path. Then the same selection process will happen for the send to location, green circle where allowed and red for not allowed. 
+load website, globe centered, starlink enabled, -> visually we see the globe slowly spinning with milky way and stars behind it. The satellites are orbittingat 10x their real speed. We see a prompt box asking us to select a loaction to send internet request. we hover our cursor over the the earth, in locations where starlink is avaliable (to send request from) there is a small green circle under the cursor to indicate where youre going to select the first location. Next to the cursor and green circle will be the location you are hovering over. Now, this location might not be connected to the internt via fiber cabling. In this case, and when starlink is not selected, we assume its connected via 5g towers. for example if we select "white cliffs NSW Australia" we visualise a radio waves coming from the nearest 5g tower, and the signla propergating throughh this to the nearest network core (via fiber optic).
+
+If the circle is red a prompt near your cursor will say “sorry! no connection here”. After selecting the senf from location and starlink is selected, make all the satellites not orbiting over the send location dissapear, and the ones that orbit over the loaction, have their orbit line appear in a faint way, pulsing to show their orbit path. Then the same selection process will happen for the send to location, green circle where allowed and red for not allowed. 
 
 these events will be controlled through the scroll, on the main page.
 
@@ -70,6 +72,7 @@ The conceptual path is:
 `User → 5G tower → fibre/network infrastructure → destination network → server`
 
 This does not need to represent every physical router. The purpose is to communicate the major stages of the journey.
+it needs to show: the tower, the nearest network core -> destination network -> server
 
 ### Origin selection
 
@@ -750,7 +753,26 @@ This is why the layout works at any resolution instead of only `1920×1080` and 
 
 ## Data is vendored, never fetched from third parties at runtime
 
-`public/data/` holds snapshots produced by `scripts/fetch-starlink.ts` and `scripts/fetch-geodata.ts` (CelesTrak GP catalogue; Natural Earth land and populated places). Always load them through `dataUrl()` in `src/data/generated/datasets.ts` — `base` is `"./"` for GitHub Pages, so an absolute `/data/...` fetch works locally and 404s once deployed.
+`public/data/` holds snapshots produced by the `scripts/fetch-*.ts` scripts (CelesTrak GP catalogue; Natural Earth land, populated places and named places; TeleGeography submarine cables; SpaceX availability; OpenCelliD towers). Always load them through `dataUrl()` in `src/data/generated/datasets.ts` — `base` is `"./"` for GitHub Pages, so an absolute `/data/...` fetch works locally and 404s once deployed.
+
+### Cell towers: a raster, deliberately
+
+`scripts/fetch-towers.ts` reads the World Bank's rasterised OpenCelliD snapshot (30 arc-second global grid, CC BY 4.0). Do not go looking for the OpenCelliD point dump instead — it is tens of millions of rows behind an account token, and could be neither shipped nor drawn. At 1 km a populated cell *is* a tower location to the precision this visualisation can honestly claim.
+
+Two things about that file will bite anyone who touches the script:
+
+- **Its strips are not in row order.** Row 0 begins 629 MB into a 933 MB file and 284 rows are stored back near the front. Read `StripOffsets`; assuming the pixels are one contiguous block after the header silently puts London, Paris and Sydney on empty ocean.
+- **The selection is stratified, not top-N.** One marker per 0.25° block that has any tower at all. Ranking globally by density keeps city centres and deletes the countryside — which is the exact case the 5G story exists to explain.
+
+## The origin is a point, not a city
+
+`state.origin` is a `RouteOrigin` — an arbitrary lat/lon plus a resolved label. It is **not** a city id, and must never be snapped to the nearest modelled city: doing so moves a request from White Cliffs to Sydney and destroys the reason the wireless hop exists. The destination does snap, because a data centre genuinely is in a specific place.
+
+The tower lookup is injected into `state` via `setTowerLookup()` rather than imported by the route builder, so `buildRoute` stays a pure function of its inputs and a route can still be built — without the radio hop — before the 2 MB tower file has arrived.
+
+## Marker layers must discard the far hemisphere
+
+Every marker layer uses additive blending, which ignores the depth buffer, so points on the back of the globe shine straight through it. `MARKER_VERTEX` computes a `vFacing` term and the fragment shader discards on it. This is invisible with a few dozen markers and a bright halo around the limb with ninety thousand — do not remove it when adding a layer.
 
 ## Orbits: Kepler + J2, and say so
 
