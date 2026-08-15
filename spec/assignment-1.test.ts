@@ -4,11 +4,15 @@ import { JSDOM } from "jsdom";
 import { describe, expect, it } from "vitest";
 import { CITY_BY_ID, GROUND_STATIONS, HUB_EDGES } from "../src/data/geo";
 import { buildRoute, buildStarlinkRoute, buildTerrestrialRoute, pickRandomPair } from "../src/data/routes";
-import type { RouteOrigin, TowerHop } from "../src/data/types";
+import type { RouteDestination, RouteOrigin, TowerHop } from "../src/data/types";
 import { createPlaceIndex, createTowerIndex, type TowerMeta } from "../src/data/generated/towers";
 import { greatCircleArcPoints, haversineKm, midpointLatLon, vector3ToLatLon, latLonToVector3 } from "../src/globe/geometry";
 
 /** A modelled city expressed as what the app now actually passes around. */
+function destOf(cityId: string): RouteDestination {
+  return originOf(cityId);
+}
+
 function originOf(cityId: string): RouteOrigin {
   const city = CITY_BY_ID.get(cityId);
   if (!city) throw new Error(`unknown test city ${cityId}`);
@@ -74,7 +78,7 @@ describe("home page markup", () => {
 
 describe("route model: terrestrial (Starlink off)", () => {
   it("always starts on the device and ends on a server", () => {
-    const route = buildTerrestrialRoute(originOf("lon"), "syd", null);
+    const route = buildTerrestrialRoute(originOf("lon"), destOf("syd"), null);
     expect(route.steps[0].kind).toBe("device");
     expect(route.steps.at(-1)?.kind).toBe("server");
     expect(route.usesStarlink).toBe(false);
@@ -83,7 +87,7 @@ describe("route model: terrestrial (Starlink off)", () => {
   // The whole point of picking a spot on the globe: the request has to start
   // where the user actually pointed, not at whichever modelled city is closest.
   it("keeps the chosen point as the origin instead of snapping to a city", () => {
-    const route = buildTerrestrialRoute(WHITE_CLIFFS, "lon", A_TOWER);
+    const route = buildTerrestrialRoute(WHITE_CLIFFS, destOf("lon"), A_TOWER);
     expect(route.steps[0].location.lat).toBeCloseTo(WHITE_CLIFFS.lat, 6);
     expect(route.steps[0].location.lon).toBeCloseTo(WHITE_CLIFFS.lon, 6);
     expect(route.steps[0].title).toContain("New South Wales");
@@ -93,27 +97,44 @@ describe("route model: terrestrial (Starlink off)", () => {
   });
 
   it("goes device → radio → network core when starting away from a hub", () => {
-    const route = buildTerrestrialRoute(WHITE_CLIFFS, "lon", A_TOWER);
+    const route = buildTerrestrialRoute(WHITE_CLIFFS, destOf("lon"), A_TOWER);
     expect(route.steps[1].infra).toBe("wireless");
     expect(route.steps[1].location.lat).toBeCloseTo(A_TOWER.lat, 6);
     expect(route.steps[2].infra).toBe("fibre-terrestrial");
     expect(route.steps[2].title).toContain("Network core");
   });
 
+  // Symmetric with the origin: the traceroute has to end at the data centre the
+  // user chose, not at whichever modelled city sits nearest to it.
+  it("ends at the chosen data centre, keeping its exact position and name", () => {
+    const equinixSy5: RouteDestination = {
+      lat: -33.7495,
+      lon: 150.9046,
+      label: "Equinix SY5b",
+      cityId: null,
+    };
+    const route = buildTerrestrialRoute(WHITE_CLIFFS, equinixSy5, A_TOWER);
+    const last = route.steps.at(-1);
+    expect(last?.kind).toBe("server");
+    expect(last?.location.lat).toBeCloseTo(equinixSy5.lat, 6);
+    expect(last?.location.lon).toBeCloseTo(equinixSy5.lon, 6);
+    expect(last?.title).toContain("Equinix SY5b");
+  });
+
   it("names the real distance to the mast rather than glossing it", () => {
-    const route = buildTerrestrialRoute(WHITE_CLIFFS, "lon", A_TOWER);
+    const route = buildTerrestrialRoute(WHITE_CLIFFS, destOf("lon"), A_TOWER);
     expect(route.steps[1].explanation).toContain("7 km");
   });
 
   it("omits the wireless hop when the origin is itself a hub", () => {
-    const route = buildTerrestrialRoute(originOf("lon"), "syd", A_TOWER);
+    const route = buildTerrestrialRoute(originOf("lon"), destOf("syd"), A_TOWER);
     expect(route.steps[1].infra).not.toBe("wireless");
   });
 
   // Tower data is 2 MB and arrives after first paint, so a route built in the
   // meantime must still be a valid route -- just without the radio leg.
   it("still builds a coherent route before the tower data has loaded", () => {
-    const route = buildTerrestrialRoute(WHITE_CLIFFS, "lon", null);
+    const route = buildTerrestrialRoute(WHITE_CLIFFS, destOf("lon"), null);
     expect(route.steps[0].kind).toBe("device");
     expect(route.steps.at(-1)?.kind).toBe("server");
     expect(route.steps.some((s) => s.infra === "wireless")).toBe(false);
@@ -125,7 +146,7 @@ describe("route model: terrestrial (Starlink off)", () => {
       ["nyc", "lax"],
       ["par", "ber"],
     ] as const) {
-      const route = buildTerrestrialRoute(originOf(from), to, null);
+      const route = buildTerrestrialRoute(originOf(from), destOf(to), null);
       const hasSubmarineStep = route.steps.some((s) => s.infra === "fibre-submarine");
       expect(route.crossesOcean).toBe(hasSubmarineStep);
       expect(route.backboneEdges.some((e) => e.kind === "submarine")).toBe(route.crossesOcean);
@@ -133,7 +154,7 @@ describe("route model: terrestrial (Starlink off)", () => {
   });
 
   it("never fabricates an undersea-cable stage for an all-terrestrial hop", () => {
-    const route = buildTerrestrialRoute(originOf("par"), "ber", null);
+    const route = buildTerrestrialRoute(originOf("par"), destOf("ber"), null);
     expect(route.crossesOcean).toBe(false);
     expect(route.steps.some((s) => s.infra === "fibre-submarine")).toBe(false);
   });
@@ -141,7 +162,7 @@ describe("route model: terrestrial (Starlink off)", () => {
 
 describe("route model: Starlink on", () => {
   it("always includes an uplink, at least one relay, and a ground-station hop", () => {
-    const route = buildStarlinkRoute(originOf("nai"), "tyo");
+    const route = buildStarlinkRoute(originOf("nai"), destOf("tyo"));
     expect(route.usesStarlink).toBe(true);
     const kinds = route.steps.map((s) => s.infra);
     expect(kinds).toContain("satellite-uplink");
@@ -150,21 +171,21 @@ describe("route model: Starlink on", () => {
   });
 
   it("routes through a real ground station id", () => {
-    const route = buildStarlinkRoute(originOf("lag"), "lon");
+    const route = buildStarlinkRoute(originOf("lag"), destOf("lon"));
     const groundStep = route.steps.find((s) => s.kind === "ground-station");
     expect(groundStep).toBeTruthy();
     expect(GROUND_STATIONS.some((gs) => gs.id === groundStep?.refId)).toBe(true);
   });
 
   it("dispatches on the starlink flag", () => {
-    expect(buildRoute(originOf("lon"), "syd", true, null).usesStarlink).toBe(true);
-    expect(buildRoute(originOf("lon"), "syd", false, null).usesStarlink).toBe(false);
+    expect(buildRoute(originOf("lon"), destOf("syd"), true, null).usesStarlink).toBe(true);
+    expect(buildRoute(originOf("lon"), destOf("syd"), false, null).usesStarlink).toBe(false);
   });
 
   // A satellite uplink goes straight up from wherever you are, so an arbitrary
   // point must not be relocated to a city here either.
   it("beams up from the chosen point, not from a nearby city", () => {
-    const route = buildStarlinkRoute(WHITE_CLIFFS, "lon");
+    const route = buildStarlinkRoute(WHITE_CLIFFS, destOf("lon"));
     const uplink = route.steps.find((s) => s.infra === "satellite-uplink");
     expect(uplink?.location.lat).toBeCloseTo(WHITE_CLIFFS.lat, 6);
     expect(uplink?.location.lon).toBeCloseTo(WHITE_CLIFFS.lon, 6);
@@ -174,17 +195,18 @@ describe("route model: Starlink on", () => {
 describe("random routes", () => {
   it("always returns a known, distinct-when-possible origin and destination", () => {
     for (let i = 0; i < 25; i++) {
-      const { origin, destId } = pickRandomPair();
+      const { origin, destination } = pickRandomPair();
       expect(origin.cityId).toBeTruthy();
       expect(CITY_BY_ID.get(origin.cityId!)?.kinds.includes("origin")).toBe(true);
-      expect(CITY_BY_ID.get(destId)?.kinds.includes("server")).toBe(true);
+      expect(destination.cityId).toBeTruthy();
+      expect(CITY_BY_ID.get(destination.cityId!)?.kinds.includes("server")).toBe(true);
     }
   });
 
   it("produces a route that builds cleanly for either mode", () => {
-    const { origin, destId } = pickRandomPair();
-    expect(() => buildRoute(origin, destId, false, null)).not.toThrow();
-    expect(() => buildRoute(origin, destId, true, null)).not.toThrow();
+    const { origin, destination } = pickRandomPair();
+    expect(() => buildRoute(origin, destination, false, null)).not.toThrow();
+    expect(() => buildRoute(origin, destination, true, null)).not.toThrow();
   });
 });
 

@@ -82,7 +82,10 @@ export function createControlPanel(): ControlPanel {
     }
   });
   destSelect.addEventListener("change", () => {
-    if (destSelect.value) setDestination(destSelect.value);
+    const city = DEST_OPTIONS.find((c) => c.id === destSelect.value);
+    if (city) {
+      setDestination({ lat: city.lat, lon: city.lon, label: `${city.name}, ${city.country}`, cityId: city.id });
+    }
   });
 
   const row = document.createElement("div");
@@ -156,7 +159,8 @@ export function createControlPanel(): ControlPanel {
     // selected — which is honest: the origin genuinely isn't one of its options.
     const originValue = s.origin?.cityId ?? "";
     if (originSelect.value !== originValue) originSelect.value = originValue;
-    if (destSelect.value !== (s.destId ?? "")) destSelect.value = s.destId ?? "";
+    const destValue = s.destination?.cityId ?? "";
+    if (destSelect.value !== destValue) destSelect.value = destValue;
     starlinkInput.checked = s.starlinkOn;
     for (const key of Object.keys(LAYER_LABELS) as (keyof LayerVisibility)[]) {
       const input = layerInputs[key];
@@ -168,7 +172,7 @@ export function createControlPanel(): ControlPanel {
   // seeded from the starting state or the Starlink switch would read "off"
   // while the constellation is on screen.
   originSelect.value = state.origin?.cityId ?? "";
-  destSelect.value = state.destId ?? "";
+  destSelect.value = state.destination?.cityId ?? "";
   starlinkInput.checked = state.starlinkOn;
   for (const key of Object.keys(LAYER_LABELS) as (keyof LayerVisibility)[]) {
     const input = layerInputs[key];

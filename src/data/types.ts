@@ -31,17 +31,23 @@ export interface GroundStation extends LatLon {
 }
 
 /**
- * Where the request actually starts: any point the user picked, not a city id.
- * The whole 5G story depends on this being the real spot — "White Cliffs" has
- * to stay White Cliffs rather than becoming Sydney because Sydney is the
- * nearest place the route graph happens to model.
+ * An end of the journey: a real point the user picked, not a city id.
+ *
+ * Both ends work this way. The origin has to be the actual spot or the 5G story
+ * collapses — "White Cliffs" must stay White Cliffs rather than becoming Sydney
+ * because Sydney is the nearest place the route graph happens to model — and
+ * the destination has to be the data centre the user chose, for the same
+ * reason: it is where the traceroute ends.
  */
-export interface RouteOrigin extends LatLon {
+export interface RoutePlace extends LatLon {
   /** Human-readable place, already resolved for display. */
   label: string;
   /** Set only when the user picked a modelled city rather than a bare point. */
   cityId: string | null;
 }
+
+export type RouteOrigin = RoutePlace;
+export type RouteDestination = RoutePlace;
 
 /** The mast serving a chosen point, and how far away it really is. */
 export interface TowerHop extends LatLon {

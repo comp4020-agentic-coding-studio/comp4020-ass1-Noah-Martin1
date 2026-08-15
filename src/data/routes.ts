@@ -1,6 +1,15 @@
 import { haversineKm, midpointLatLon } from "../globe/geometry";
 import { CITIES, CITY_BY_ID, GROUND_STATIONS, HUB_EDGES } from "./geo";
-import type { City, HubEdge, LatLon, Route, RouteOrigin, RouteStep, TowerHop } from "./types";
+import type {
+  City,
+  HubEdge,
+  LatLon,
+  Route,
+  RouteDestination,
+  RouteOrigin,
+  RouteStep,
+  TowerHop,
+} from "./types";
 
 const HUB_IDS = CITIES.filter((c) => c.kinds.includes("hub")).map((c) => c.id);
 
@@ -172,14 +181,14 @@ function undersea(fromName: string, toName: string, city: City): RouteStep {
   });
 }
 
-function serverStep(city: City): RouteStep {
+function serverStep(destination: RouteDestination): RouteStep {
   return step({
     kind: "server",
-    refId: city.id,
-    location: city,
+    refId: destination.cityId ?? "destination",
+    location: destination,
     infra: "fibre-terrestrial",
-    title: `Server — ${city.name}`,
-    explanation: `The request reaches a server in a data centre near ${city.name}, which processes it and prepares a response to send back.`,
+    title: `Server — ${destination.label}`,
+    explanation: `The request reaches a server in ${destination.label}, which processes it and prepares a response to send back.`,
     fact: "Popular services run in data centres in many regions at once, so requests are often answered from whichever is geographically closest.",
     visual: "glow",
   });
@@ -240,10 +249,11 @@ function withHubPath(steps: RouteStep[], hubIds: string[], edges: HubEdge[], ski
   }
 }
 
-export function buildTerrestrialRoute(origin: RouteOrigin, destId: string, tower: TowerHop | null): Route {
-  const dest = CITY_BY_ID.get(destId);
-  if (!dest) throw new Error(`Unknown city id: ${destId}`);
-
+export function buildTerrestrialRoute(
+  origin: RouteOrigin,
+  destination: RouteDestination,
+  tower: TowerHop | null,
+): Route {
   const steps: RouteStep[] = [deviceStep(origin)];
 
   /*
@@ -261,19 +271,16 @@ export function buildTerrestrialRoute(origin: RouteOrigin, destId: string, tower
     steps.push(coreStep(originHub, tower));
   }
 
-  const { hubIds, edges } = shortestHubPath(originHub.id, nearestHub(dest).id);
+  const { hubIds, edges } = shortestHubPath(originHub.id, nearestHub(destination).id);
   // The core step already introduced this hub, so don't announce it twice.
   withHubPath(steps, hubIds, edges, !startsAtHub && tower !== null);
 
-  steps.push(serverStep(dest));
+  steps.push(serverStep(destination));
 
   return { steps, usesStarlink: false, crossesOcean: edges.some((e) => e.kind === "submarine"), backboneEdges: edges };
 }
 
-export function buildStarlinkRoute(origin: RouteOrigin, destId: string): Route {
-  const dest = CITY_BY_ID.get(destId);
-  if (!dest) throw new Error(`Unknown city id: ${destId}`);
-
+export function buildStarlinkRoute(origin: RouteOrigin, destination: RouteDestination): Route {
   const gs = nearestGroundStation(origin);
   const steps: RouteStep[] = [
     deviceStep(origin),
@@ -282,26 +289,28 @@ export function buildStarlinkRoute(origin: RouteOrigin, destId: string): Route {
     groundStationStep(gs),
   ];
 
-  const { hubIds, edges } = shortestHubPath(gs.nearestHub, nearestHub(dest).id);
+  const { hubIds, edges } = shortestHubPath(gs.nearestHub, nearestHub(destination).id);
   withHubPath(steps, hubIds, edges);
-  steps.push(serverStep(dest));
+  steps.push(serverStep(destination));
 
   return { steps, usesStarlink: true, crossesOcean: edges.some((e) => e.kind === "submarine"), backboneEdges: edges };
 }
 
 export function buildRoute(
   origin: RouteOrigin,
-  destId: string,
+  destination: RouteDestination,
   starlink: boolean,
   tower: TowerHop | null,
 ): Route {
-  return starlink ? buildStarlinkRoute(origin, destId) : buildTerrestrialRoute(origin, destId, tower);
+  return starlink
+    ? buildStarlinkRoute(origin, destination)
+    : buildTerrestrialRoute(origin, destination, tower);
 }
 
 const RANDOMIZABLE_ORIGINS = CITIES.filter((c) => c.kinds.includes("origin"));
 const RANDOMIZABLE_SERVERS = CITIES.filter((c) => c.kinds.includes("server"));
 
-export function pickRandomPair(): { origin: RouteOrigin; destId: string } {
+export function pickRandomPair(): { origin: RouteOrigin; destination: RouteDestination } {
   const origin = RANDOMIZABLE_ORIGINS[Math.floor(Math.random() * RANDOMIZABLE_ORIGINS.length)];
   let dest = RANDOMIZABLE_SERVERS[Math.floor(Math.random() * RANDOMIZABLE_SERVERS.length)];
   let guard = 0;
@@ -311,6 +320,6 @@ export function pickRandomPair(): { origin: RouteOrigin; destId: string } {
   }
   return {
     origin: { lat: origin.lat, lon: origin.lon, label: `${origin.name}, ${origin.country}`, cityId: origin.id },
-    destId: dest.id,
+    destination: { lat: dest.lat, lon: dest.lon, label: `${dest.name}, ${dest.country}`, cityId: dest.id },
   };
 }
