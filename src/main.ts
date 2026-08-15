@@ -279,6 +279,7 @@ function updateReply(dtMs: number): void {
 
 let lastRoute: Route | null = null;
 let lastStage = -1;
+let lastFocusId: string | null = null;
 
 subscribe((s) => {
   if (s.route !== lastRoute) {
@@ -294,6 +295,22 @@ subscribe((s) => {
   const origin = s.originId ? (CITY_BY_ID.get(s.originId) ?? null) : null;
   starlink?.setVisible(s.starlinkOn);
   starlink?.setOrigin(origin);
+
+  /*
+   * Swing the globe to whatever was just chosen, however it was chosen. Tapping
+   * the globe used to be the only path that did this, so picking Sydney from the
+   * From menu left the camera over the Americas with Sydney's satellites arcing
+   * in from behind the planet -- the selection was invisible at the moment it
+   * mattered most.
+   *
+   * Only while choosing: once both ends are set the camera director owns the
+   * camera, and a focus call here would fight it.
+   */
+  if (s.originId && s.originId !== lastFocusId && phaseFor(s.originId, s.destId) !== "journey") {
+    const city = CITY_BY_ID.get(s.originId);
+    if (city) controls.focusOn(city);
+  }
+  lastFocusId = s.originId;
 
   const nextPhase = phaseFor(s.originId, s.destId);
   if (nextPhase !== phase) {
