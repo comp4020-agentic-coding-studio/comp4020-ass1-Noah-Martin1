@@ -4,7 +4,26 @@ import { JSDOM } from "jsdom";
 import { describe, expect, it } from "vitest";
 import { CITY_BY_ID, GROUND_STATIONS, HUB_EDGES } from "../src/data/geo";
 import { buildRoute, buildStarlinkRoute, buildTerrestrialRoute, pickRandomPair } from "../src/data/routes";
+import type { RouteOrigin, TowerHop } from "../src/data/types";
+import { createPlaceIndex, createTowerIndex, type TowerMeta } from "../src/data/generated/towers";
 import { greatCircleArcPoints, haversineKm, midpointLatLon, vector3ToLatLon, latLonToVector3 } from "../src/globe/geometry";
+
+/** A modelled city expressed as what the app now actually passes around. */
+function originOf(cityId: string): RouteOrigin {
+  const city = CITY_BY_ID.get(cityId);
+  if (!city) throw new Error(`unknown test city ${cityId}`);
+  return { lat: city.lat, lon: city.lon, label: `${city.name}, ${city.country}`, cityId };
+}
+
+/** A point that is deliberately not any modelled city: White Cliffs, NSW. */
+const WHITE_CLIFFS: RouteOrigin = {
+  lat: -30.85,
+  lon: 143.09,
+  label: "New South Wales, Australia · 84 km from Wilcannia",
+  cityId: null,
+};
+
+const A_TOWER: TowerHop = { lat: -30.79, lon: 143.1, towers: 2, distanceKm: 7 };
 
 // This week's spec is "Visualise your internet requests": an interactive
 // globe that walks a user through how a request travels, over conventional
@@ -55,18 +74,49 @@ describe("home page markup", () => {
 
 describe("route model: terrestrial (Starlink off)", () => {
   it("always starts on the device and ends on a server", () => {
-    const route = buildTerrestrialRoute("lon", "syd");
+    const route = buildTerrestrialRoute(originOf("lon"), "syd", null);
     expect(route.steps[0].kind).toBe("device");
     expect(route.steps.at(-1)?.kind).toBe("server");
     expect(route.usesStarlink).toBe(false);
   });
 
-  it("inserts a wireless hop only when the origin isn't itself a hub", () => {
-    const fromNonHub = buildTerrestrialRoute("chi", "syd"); // Chicago: origin-only
-    expect(fromNonHub.steps[1].infra).toBe("wireless");
+  // The whole point of picking a spot on the globe: the request has to start
+  // where the user actually pointed, not at whichever modelled city is closest.
+  it("keeps the chosen point as the origin instead of snapping to a city", () => {
+    const route = buildTerrestrialRoute(WHITE_CLIFFS, "lon", A_TOWER);
+    expect(route.steps[0].location.lat).toBeCloseTo(WHITE_CLIFFS.lat, 6);
+    expect(route.steps[0].location.lon).toBeCloseTo(WHITE_CLIFFS.lon, 6);
+    expect(route.steps[0].title).toContain("New South Wales");
+    // Sydney is the nearest modelled hub; it must appear as a later hop, not
+    // as the place the request began.
+    expect(route.steps[0].title).not.toContain("Sydney");
+  });
 
-    const fromHub = buildTerrestrialRoute("lon", "syd"); // London: origin + hub
-    expect(fromHub.steps[1].infra).not.toBe("wireless");
+  it("goes device → radio → network core when starting away from a hub", () => {
+    const route = buildTerrestrialRoute(WHITE_CLIFFS, "lon", A_TOWER);
+    expect(route.steps[1].infra).toBe("wireless");
+    expect(route.steps[1].location.lat).toBeCloseTo(A_TOWER.lat, 6);
+    expect(route.steps[2].infra).toBe("fibre-terrestrial");
+    expect(route.steps[2].title).toContain("Network core");
+  });
+
+  it("names the real distance to the mast rather than glossing it", () => {
+    const route = buildTerrestrialRoute(WHITE_CLIFFS, "lon", A_TOWER);
+    expect(route.steps[1].explanation).toContain("7 km");
+  });
+
+  it("omits the wireless hop when the origin is itself a hub", () => {
+    const route = buildTerrestrialRoute(originOf("lon"), "syd", A_TOWER);
+    expect(route.steps[1].infra).not.toBe("wireless");
+  });
+
+  // Tower data is 2 MB and arrives after first paint, so a route built in the
+  // meantime must still be a valid route -- just without the radio leg.
+  it("still builds a coherent route before the tower data has loaded", () => {
+    const route = buildTerrestrialRoute(WHITE_CLIFFS, "lon", null);
+    expect(route.steps[0].kind).toBe("device");
+    expect(route.steps.at(-1)?.kind).toBe("server");
+    expect(route.steps.some((s) => s.infra === "wireless")).toBe(false);
   });
 
   it("marks crossesOcean exactly when the path uses a submarine edge", () => {
@@ -75,7 +125,7 @@ describe("route model: terrestrial (Starlink off)", () => {
       ["nyc", "lax"],
       ["par", "ber"],
     ] as const) {
-      const route = buildTerrestrialRoute(from, to);
+      const route = buildTerrestrialRoute(originOf(from), to, null);
       const hasSubmarineStep = route.steps.some((s) => s.infra === "fibre-submarine");
       expect(route.crossesOcean).toBe(hasSubmarineStep);
       expect(route.backboneEdges.some((e) => e.kind === "submarine")).toBe(route.crossesOcean);
@@ -83,7 +133,7 @@ describe("route model: terrestrial (Starlink off)", () => {
   });
 
   it("never fabricates an undersea-cable stage for an all-terrestrial hop", () => {
-    const route = buildTerrestrialRoute("par", "ber");
+    const route = buildTerrestrialRoute(originOf("par"), "ber", null);
     expect(route.crossesOcean).toBe(false);
     expect(route.steps.some((s) => s.infra === "fibre-submarine")).toBe(false);
   });
@@ -91,7 +141,7 @@ describe("route model: terrestrial (Starlink off)", () => {
 
 describe("route model: Starlink on", () => {
   it("always includes an uplink, at least one relay, and a ground-station hop", () => {
-    const route = buildStarlinkRoute("nai", "tyo");
+    const route = buildStarlinkRoute(originOf("nai"), "tyo");
     expect(route.usesStarlink).toBe(true);
     const kinds = route.steps.map((s) => s.infra);
     expect(kinds).toContain("satellite-uplink");
@@ -100,31 +150,87 @@ describe("route model: Starlink on", () => {
   });
 
   it("routes through a real ground station id", () => {
-    const route = buildStarlinkRoute("lag", "lon");
+    const route = buildStarlinkRoute(originOf("lag"), "lon");
     const groundStep = route.steps.find((s) => s.kind === "ground-station");
     expect(groundStep).toBeTruthy();
     expect(GROUND_STATIONS.some((gs) => gs.id === groundStep?.refId)).toBe(true);
   });
 
   it("dispatches on the starlink flag", () => {
-    expect(buildRoute("lon", "syd", true).usesStarlink).toBe(true);
-    expect(buildRoute("lon", "syd", false).usesStarlink).toBe(false);
+    expect(buildRoute(originOf("lon"), "syd", true, null).usesStarlink).toBe(true);
+    expect(buildRoute(originOf("lon"), "syd", false, null).usesStarlink).toBe(false);
+  });
+
+  // A satellite uplink goes straight up from wherever you are, so an arbitrary
+  // point must not be relocated to a city here either.
+  it("beams up from the chosen point, not from a nearby city", () => {
+    const route = buildStarlinkRoute(WHITE_CLIFFS, "lon");
+    const uplink = route.steps.find((s) => s.infra === "satellite-uplink");
+    expect(uplink?.location.lat).toBeCloseTo(WHITE_CLIFFS.lat, 6);
+    expect(uplink?.location.lon).toBeCloseTo(WHITE_CLIFFS.lon, 6);
   });
 });
 
 describe("random routes", () => {
   it("always returns a known, distinct-when-possible origin and destination", () => {
     for (let i = 0; i < 25; i++) {
-      const { originId, destId } = pickRandomPair();
-      expect(CITY_BY_ID.get(originId)?.kinds.includes("origin")).toBe(true);
+      const { origin, destId } = pickRandomPair();
+      expect(origin.cityId).toBeTruthy();
+      expect(CITY_BY_ID.get(origin.cityId!)?.kinds.includes("origin")).toBe(true);
       expect(CITY_BY_ID.get(destId)?.kinds.includes("server")).toBe(true);
     }
   });
 
   it("produces a route that builds cleanly for either mode", () => {
-    const { originId, destId } = pickRandomPair();
-    expect(() => buildRoute(originId, destId, false)).not.toThrow();
-    expect(() => buildRoute(originId, destId, true)).not.toThrow();
+    const { origin, destId } = pickRandomPair();
+    expect(() => buildRoute(origin, destId, false, null)).not.toThrow();
+    expect(() => buildRoute(origin, destId, true, null)).not.toThrow();
+  });
+});
+
+describe("cell towers and place naming", () => {
+  const META = { towerPoints: 3 } as TowerMeta;
+
+  it("finds the nearest tower and reports a real distance", () => {
+    const index = createTowerIndex(
+      [
+        [151.2, -33.87, 4875], // Sydney
+        [143.1, -30.79, 2], // near White Cliffs
+        [-0.13, 51.51, 68029], // London
+      ],
+      META,
+    );
+    const found = index.nearest({ lat: -30.85, lon: 143.09 });
+    expect(found?.tower.lon).toBeCloseTo(143.1, 3);
+    expect(found?.distanceKm).toBeLessThan(20);
+  });
+
+  // Longitude wraps; a naive comparison puts the nearest tower on the wrong
+  // side of the planet for anything sitting on the antimeridian.
+  it("handles the antimeridian when choosing the nearest tower", () => {
+    const index = createTowerIndex(
+      [
+        [179.5, -17, 1],
+        [-100, -17, 1],
+      ],
+      META,
+    );
+    expect(index.nearest({ lat: -17, lon: -179.6 })?.tower.lon).toBeCloseTo(179.5, 3);
+  });
+
+  it("names a nearby place directly, and a distant one with its distance", () => {
+    const places = createPlaceIndex([
+      [143.375, -31.557, "Wilcannia", "New South Wales", "Australia"],
+      [151.209, -33.868, "Sydney", "New South Wales", "Australia"],
+    ]);
+
+    const close = places.label({ lat: -31.55, lon: 143.38 });
+    expect(close?.text).toBe("Wilcannia, New South Wales, Australia");
+
+    // White Cliffs is ~84 km out, so the label must not imply you are in town.
+    const far = places.label({ lat: -30.85, lon: 143.09 });
+    expect(far?.text).toContain("New South Wales, Australia");
+    expect(far?.text).toMatch(/\d+ km from Wilcannia/);
   });
 });
 

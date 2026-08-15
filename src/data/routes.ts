@@ -1,6 +1,6 @@
 import { haversineKm, midpointLatLon } from "../globe/geometry";
 import { CITIES, CITY_BY_ID, GROUND_STATIONS, HUB_EDGES } from "./geo";
-import type { City, HubEdge, LatLon, Route, RouteStep } from "./types";
+import type { City, HubEdge, LatLon, Route, RouteOrigin, RouteStep, TowerHop } from "./types";
 
 const HUB_IDS = CITIES.filter((c) => c.kinds.includes("hub")).map((c) => c.id);
 
@@ -66,13 +66,12 @@ function shortestHubPath(fromHub: string, toHub: string): { hubIds: string[]; ed
   return { hubIds, edges };
 }
 
-function nearestHub(city: City): City {
-  if (city.kinds.includes("hub")) return city;
+function nearestHub(at: LatLon): City {
   let best = CITY_BY_ID.get(HUB_IDS[0])!;
   let bestDist = Infinity;
   for (const id of HUB_IDS) {
     const hub = CITY_BY_ID.get(id)!;
-    const d = haversineKm(city, hub);
+    const d = haversineKm(at, hub);
     if (d < bestDist) {
       bestDist = d;
       best = hub;
@@ -81,11 +80,11 @@ function nearestHub(city: City): City {
   return best;
 }
 
-function nearestGroundStation(city: City) {
+function nearestGroundStation(at: LatLon) {
   let best = GROUND_STATIONS[0];
   let bestDist = Infinity;
   for (const gs of GROUND_STATIONS) {
-    const d = haversineKm(city, gs);
+    const d = haversineKm(at, gs);
     if (d < bestDist) {
       bestDist = d;
       best = gs;
@@ -100,29 +99,50 @@ function step(partial: Omit<RouteStep, "id">): RouteStep {
   return { ...partial, id: `step-${stepCounter}` };
 }
 
-function deviceStep(city: City): RouteStep {
+function deviceStep(origin: RouteOrigin): RouteStep {
   return step({
     kind: "device",
-    refId: city.id,
-    location: city,
+    refId: origin.cityId ?? "origin",
+    location: origin,
     infra: null,
-    title: `Your device — ${city.name}`,
-    explanation: `The request begins on your device in ${city.name}, ${city.country}. Before it can go anywhere, your device packages the request into small units called packets, each addressed with an IP address.`,
+    title: `Your device — ${origin.label}`,
+    explanation: `The request begins on your device at ${origin.label}. Before it can go anywhere, your device packages the request into small units called packets, each addressed with an IP address.`,
     fact: "Every device on the internet is identified by an IP address, so replies know where to come back to.",
     visual: "pulse",
   });
 }
 
-function towerStep(city: City): RouteStep {
+/**
+ * The wireless hop. This is the step the whole "you are here, not in the
+ * nearest city" point rests on, so it names the actual distance to the tower
+ * rather than glossing it — 7 km outside White Cliffs and 1 km in Sydney are
+ * different stories about the same infrastructure.
+ */
+function towerStep(tower: TowerHop, origin: RouteOrigin): RouteStep {
+  const distance = tower.distanceKm < 1 ? "under a kilometre" : `about ${Math.round(tower.distanceKm)} km`;
   return step({
     kind: "tower",
-    refId: city.id,
-    location: city,
+    refId: "tower",
+    location: tower,
     infra: "wireless",
     title: "Wireless connection",
-    explanation: `${city.name} isn't itself a major network hub, so the request first travels over radio to a nearby 5G tower.`,
+    explanation: `There is no fibre running to ${origin.label} itself. The request travels over radio to the nearest mast, ${distance} away, which is where the wired network actually begins.`,
     fact: "5G carries data over radio waves for the first hop only — once it reaches the tower, it continues over wired fibre.",
     visual: "radio",
+  });
+}
+
+/** The first wired hop after the mast: the operator's nearest core network. */
+function coreStep(hub: City, tower: TowerHop): RouteStep {
+  return step({
+    kind: "hub",
+    refId: hub.id,
+    location: hub,
+    infra: "fibre-terrestrial",
+    title: `Network core — ${hub.name}`,
+    explanation: `From the mast the request runs down fibre-optic cable to ${hub.name}, roughly ${Math.round(haversineKm(tower, hub))} km away — the nearest place where the operator's network joins the wider internet.`,
+    fact: "A mast is only an antenna. Every tower is wired back to a core network, so almost all of a “wireless” journey actually happens through cable.",
+    visual: "pulse",
   });
 }
 
@@ -165,10 +185,10 @@ function serverStep(city: City): RouteStep {
   });
 }
 
-function satelliteUplinkStep(origin: City): RouteStep {
+function satelliteUplinkStep(origin: RouteOrigin): RouteStep {
   return step({
     kind: "satellite",
-    refId: `${origin.id}-uplink`,
+    refId: "uplink",
     location: origin,
     infra: "satellite-uplink",
     title: "Uplink to satellite",
@@ -204,11 +224,11 @@ function groundStationStep(gs: { id: string; name: string; lat: number; lon: num
   });
 }
 
-function withHubPath(steps: RouteStep[], hubIds: string[], edges: HubEdge[]): void {
+function withHubPath(steps: RouteStep[], hubIds: string[], edges: HubEdge[], skipFirst = false): void {
   for (let i = 0; i < hubIds.length; i++) {
     const hub = CITY_BY_ID.get(hubIds[i])!;
     if (i === 0) {
-      steps.push(hubStep(hub));
+      if (!skipFirst) steps.push(hubStep(hub));
       continue;
     }
     const edge = edges[i - 1];
@@ -220,34 +240,45 @@ function withHubPath(steps: RouteStep[], hubIds: string[], edges: HubEdge[]): vo
   }
 }
 
-export function buildTerrestrialRoute(originId: string, destId: string): Route {
-  const origin = CITY_BY_ID.get(originId);
+export function buildTerrestrialRoute(origin: RouteOrigin, destId: string, tower: TowerHop | null): Route {
   const dest = CITY_BY_ID.get(destId);
-  if (!origin || !dest) throw new Error(`Unknown city id: ${originId} / ${destId}`);
+  if (!dest) throw new Error(`Unknown city id: ${destId}`);
 
   const steps: RouteStep[] = [deviceStep(origin)];
-  if (!origin.kinds.includes("hub")) steps.push(towerStep(origin));
 
-  const originHub = nearestHub(origin);
-  const destHub = nearestHub(dest);
-  const { hubIds, edges } = shortestHubPath(originHub.id, destHub.id);
-  withHubPath(steps, hubIds, edges);
+  /*
+   * The wireless hop is skipped only when the request already starts inside a
+   * modelled backbone hub — picking "London" from the menu should not claim a
+   * mast between your device and the exchange. Every other point on Earth gets
+   * the radio hop, including points inside cities, because that is how a phone
+   * actually reaches the network.
+   */
+  const startsAtHub = origin.cityId !== null && (CITY_BY_ID.get(origin.cityId)?.kinds.includes("hub") ?? false);
+  const originHub = startsAtHub ? CITY_BY_ID.get(origin.cityId!)! : nearestHub(origin);
+
+  if (!startsAtHub && tower) {
+    steps.push(towerStep(tower, origin));
+    steps.push(coreStep(originHub, tower));
+  }
+
+  const { hubIds, edges } = shortestHubPath(originHub.id, nearestHub(dest).id);
+  // The core step already introduced this hub, so don't announce it twice.
+  withHubPath(steps, hubIds, edges, !startsAtHub && tower !== null);
 
   steps.push(serverStep(dest));
 
   return { steps, usesStarlink: false, crossesOcean: edges.some((e) => e.kind === "submarine"), backboneEdges: edges };
 }
 
-export function buildStarlinkRoute(originId: string, destId: string): Route {
-  const origin = CITY_BY_ID.get(originId);
+export function buildStarlinkRoute(origin: RouteOrigin, destId: string): Route {
   const dest = CITY_BY_ID.get(destId);
-  if (!origin || !dest) throw new Error(`Unknown city id: ${originId} / ${destId}`);
+  if (!dest) throw new Error(`Unknown city id: ${destId}`);
 
   const gs = nearestGroundStation(origin);
   const steps: RouteStep[] = [
     deviceStep(origin),
     satelliteUplinkStep(origin),
-    satelliteRelayStep(origin.id, midpointLatLon(origin, gs), 1),
+    satelliteRelayStep(origin.cityId ?? "origin", midpointLatLon(origin, gs), 1),
     groundStationStep(gs),
   ];
 
@@ -258,14 +289,19 @@ export function buildStarlinkRoute(originId: string, destId: string): Route {
   return { steps, usesStarlink: true, crossesOcean: edges.some((e) => e.kind === "submarine"), backboneEdges: edges };
 }
 
-export function buildRoute(originId: string, destId: string, starlink: boolean): Route {
-  return starlink ? buildStarlinkRoute(originId, destId) : buildTerrestrialRoute(originId, destId);
+export function buildRoute(
+  origin: RouteOrigin,
+  destId: string,
+  starlink: boolean,
+  tower: TowerHop | null,
+): Route {
+  return starlink ? buildStarlinkRoute(origin, destId) : buildTerrestrialRoute(origin, destId, tower);
 }
 
 const RANDOMIZABLE_ORIGINS = CITIES.filter((c) => c.kinds.includes("origin"));
 const RANDOMIZABLE_SERVERS = CITIES.filter((c) => c.kinds.includes("server"));
 
-export function pickRandomPair(): { originId: string; destId: string } {
+export function pickRandomPair(): { origin: RouteOrigin; destId: string } {
   const origin = RANDOMIZABLE_ORIGINS[Math.floor(Math.random() * RANDOMIZABLE_ORIGINS.length)];
   let dest = RANDOMIZABLE_SERVERS[Math.floor(Math.random() * RANDOMIZABLE_SERVERS.length)];
   let guard = 0;
@@ -273,5 +309,8 @@ export function pickRandomPair(): { originId: string; destId: string } {
     dest = RANDOMIZABLE_SERVERS[Math.floor(Math.random() * RANDOMIZABLE_SERVERS.length)];
     guard += 1;
   }
-  return { originId: origin.id, destId: dest.id };
+  return {
+    origin: { lat: origin.lat, lon: origin.lon, label: `${origin.name}, ${origin.country}`, cityId: origin.id },
+    destId: dest.id,
+  };
 }

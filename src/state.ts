@@ -1,5 +1,5 @@
 import { buildRoute, pickRandomPair } from "./data/routes";
-import type { Route } from "./data/types";
+import type { LatLon, Route, RouteOrigin, TowerHop } from "./data/types";
 
 export interface LayerVisibility {
   fibre: boolean;
@@ -9,7 +9,8 @@ export interface LayerVisibility {
 }
 
 export interface AppState {
-  originId: string | null;
+  /** The exact point the request starts from — not snapped to a modelled city. */
+  origin: RouteOrigin | null;
   destId: string | null;
   starlinkOn: boolean;
   route: Route | null;
@@ -22,7 +23,7 @@ type Listener = (state: AppState) => void;
 const listeners = new Set<Listener>();
 
 export const state: AppState = {
-  originId: null,
+  origin: null,
   destId: null,
   // The flow opens on Starlink: the constellation is the first thing the user
   // sees orbiting, and selection is gated on Starlink's coverage from the
@@ -42,17 +43,35 @@ export function subscribe(listener: Listener): () => void {
   return () => listeners.delete(listener);
 }
 
+/**
+ * Supplied by main.ts once the tower dataset has loaded. Kept as an injected
+ * lookup rather than an import so route building stays a pure function of its
+ * inputs, and so a route can still be built (minus the radio hop) before 2 MB
+ * of tower positions has come down the wire.
+ */
+let towerLookup: ((at: LatLon) => TowerHop | null) | null = null;
+
+export function setTowerLookup(lookup: (at: LatLon) => TowerHop | null): void {
+  towerLookup = lookup;
+  // Anything already on screen was built without a mast; rebuild it with one.
+  if (state.origin && state.destId) {
+    recomputeRoute();
+    notify();
+  }
+}
+
 function recomputeRoute(): void {
   state.stageIndex = 0;
-  if (state.originId && state.destId) {
-    state.route = buildRoute(state.originId, state.destId, state.starlinkOn);
+  if (state.origin && state.destId) {
+    const tower = towerLookup ? towerLookup(state.origin) : null;
+    state.route = buildRoute(state.origin, state.destId, state.starlinkOn, tower);
   } else {
     state.route = null;
   }
 }
 
-export function setOrigin(id: string): void {
-  state.originId = id;
+export function setOrigin(origin: RouteOrigin): void {
+  state.origin = origin;
   recomputeRoute();
   notify();
 }
@@ -81,8 +100,8 @@ export function setLayer(layer: keyof LayerVisibility, on: boolean): void {
 }
 
 export function randomizeRoute(): void {
-  const { originId, destId } = pickRandomPair();
-  state.originId = originId;
+  const { origin, destId } = pickRandomPair();
+  state.origin = origin;
   state.destId = destId;
   recomputeRoute();
   notify();

@@ -76,7 +76,10 @@ export function createControlPanel(): ControlPanel {
   }
 
   originSelect.addEventListener("change", () => {
-    if (originSelect.value) setOrigin(originSelect.value);
+    const city = ORIGIN_OPTIONS.find((c) => c.id === originSelect.value);
+    if (city) {
+      setOrigin({ lat: city.lat, lon: city.lon, label: `${city.name}, ${city.country}`, cityId: city.id });
+    }
   });
   destSelect.addEventListener("change", () => {
     if (destSelect.value) setDestination(destSelect.value);
@@ -149,7 +152,10 @@ export function createControlPanel(): ControlPanel {
   }
 
   subscribe((s) => {
-    if (originSelect.value !== (s.originId ?? "")) originSelect.value = s.originId ?? "";
+    // A point picked off the globe has no city id, so the menu shows nothing
+    // selected — which is honest: the origin genuinely isn't one of its options.
+    const originValue = s.origin?.cityId ?? "";
+    if (originSelect.value !== originValue) originSelect.value = originValue;
     if (destSelect.value !== (s.destId ?? "")) destSelect.value = s.destId ?? "";
     starlinkInput.checked = s.starlinkOn;
     for (const key of Object.keys(LAYER_LABELS) as (keyof LayerVisibility)[]) {
@@ -161,7 +167,7 @@ export function createControlPanel(): ControlPanel {
   // Initial sync: subscribe() only fires on change, so the controls have to be
   // seeded from the starting state or the Starlink switch would read "off"
   // while the constellation is on screen.
-  originSelect.value = state.originId ?? "";
+  originSelect.value = state.origin?.cityId ?? "";
   destSelect.value = state.destId ?? "";
   starlinkInput.checked = state.starlinkOn;
   for (const key of Object.keys(LAYER_LABELS) as (keyof LayerVisibility)[]) {

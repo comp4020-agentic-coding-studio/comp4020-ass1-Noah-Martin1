@@ -1,8 +1,8 @@
-import { CITY_BY_ID } from "./data/geo";
 import { cableSegments, loadCableMeta, loadCables } from "./data/generated/cables";
 import { loadCoverage, loadStarlinkGateways, type Coverage } from "./data/generated/coverage";
 import { loadCities, loadLand, loadStarlink, type PackedCity } from "./data/generated/datasets";
-import type { LatLon, Route } from "./data/types";
+import { loadPlaces, loadTowers, type PlaceIndex } from "./data/generated/towers";
+import type { LatLon, Route, RouteOrigin } from "./data/types";
 import { haversineKm } from "./globe/geometry";
 import { createCameraDirector, nodePose, overviewPose, relayPose, uplinkPose, type Pose } from "./globe2/camera-director";
 import { createEarth } from "./globe2/earth";
@@ -10,13 +10,14 @@ import { createHoverCursor } from "./globe2/hover-cursor";
 import { bakeLandTexture } from "./globe2/land-texture";
 import { createNetworkLayer } from "./globe2/network";
 import { attachOrbitControls } from "./globe2/orbit-controls";
+import { createRadioWaves } from "./globe2/radio-waves";
 import { locationAt, nearestCityWithKind } from "./globe2/picking";
 import { createRouteLayer } from "./globe2/route";
 import { createGlobeScene } from "./globe2/scene";
 import { createSky } from "./globe2/sky";
 import { createStarlinkField, type StarlinkField } from "./globe2/starlink-field";
 import { createStoryPanel } from "./scroll/story";
-import { setDestination, setOrigin, state, subscribe } from "./state";
+import { setDestination, setOrigin, setTowerLookup, state, subscribe } from "./state";
 import { createControlPanel } from "./ui/panel";
 import { createPrompt } from "./ui/prompt";
 
@@ -54,9 +55,10 @@ const earth = createEarth();
 const network = createNetworkLayer();
 const route = createRouteLayer();
 const hover = createHoverCursor(globe, document.body);
+const radio = createRadioWaves();
 const director = createCameraDirector(globe.camera);
 
-globe.scene.add(sky.group, earth.group, network.group, route.group, hover.group);
+globe.scene.add(sky.group, earth.group, network.group, route.group, hover.group, radio.group);
 
 let starlink: StarlinkField | null = null;
 
@@ -91,6 +93,21 @@ function coveredAt(location: LatLon): boolean {
   if (!coverage) return fallbackCovered(location);
   const mask = state.starlinkOn ? coverage.starlink : coverage.mobile;
   return mask.has(location.lat, location.lon);
+}
+
+let places: PlaceIndex | null = null;
+
+/**
+ * What to call a bare lat/lon. Natural Earth carries ~7,300 places, so a remote
+ * point's nearest named town can be a hundred kilometres off; the label says so
+ * rather than pretending the request starts in that town.
+ */
+function labelFor(location: LatLon): string {
+  const label = places?.label(location);
+  if (label) return label.text;
+  const ns = location.lat >= 0 ? "N" : "S";
+  const ew = location.lon >= 0 ? "E" : "W";
+  return `${Math.abs(location.lat).toFixed(1)}°${ns}, ${Math.abs(location.lon).toFixed(1)}°${ew}`;
 }
 
 // --- layout ---------------------------------------------------------------
@@ -128,8 +145,8 @@ function releaseShot(): void {
 
 type Phase = "choose-origin" | "choose-destination" | "journey";
 
-function phaseFor(originId: string | null, destId: string | null): Phase {
-  if (!originId) return "choose-origin";
+function phaseFor(origin: RouteOrigin | null, destId: string | null): Phase {
+  if (!origin) return "choose-origin";
   if (!destId) return "choose-destination";
   return "journey";
 }
@@ -176,21 +193,29 @@ const controls = attachOrbitControls(globe, {
       return;
     }
 
-    const kind = phase === "choose-origin" ? "origin" : "server";
-    const nearest = nearestCityWithKind(location, kind);
-    if (!nearest) return;
+    if (phase === "choose-origin") {
+      /*
+       * The origin is the point that was tapped, full stop. It used to snap to
+       * the nearest modelled city, which quietly moved a request from White
+       * Cliffs to Sydney and threw away the whole reason the 5G leg exists.
+       */
+      panel.setFeedback(null);
+      controls.focusOn(location);
+      setOrigin({ ...location, label: labelFor(location), cityId: null });
+      return;
+    }
 
-    // Snapping is honest rather than silent: the route graph models a few dozen
-    // places, so say when the chosen point was attached to one further away.
+    // The destination is a data centre, and those really are in specific
+    // places, so this one does snap — and says so when the jump is a long one.
+    const nearest = nearestCityWithKind(location, "server");
+    if (!nearest) return;
     panel.setFeedback(
       nearest.distanceKm > 400
-        ? `Nearest modelled network entry: ${nearest.city.name} (${Math.round(nearest.distanceKm)} km away).`
+        ? `Nearest modelled data centre: ${nearest.city.name} (${Math.round(nearest.distanceKm)} km away).`
         : null,
     );
-
     controls.focusOn(nearest.city);
-    if (phase === "choose-origin") setOrigin(nearest.city.id);
-    else setDestination(nearest.city.id);
+    setDestination(nearest.city.id);
   },
 });
 
@@ -228,6 +253,9 @@ function playBeat(current: Route, stageIndex: number): void {
   // Relay legs need the other satellites back on screen — they are what the
   // signal is hopping between.
   starlink?.setIsolated(state.starlinkOn && step.infra !== "satellite-link");
+
+  // The one hop that travels through the air gets rings spreading off the mast.
+  radio.showAt(step.visual === "radio" ? step.location : null);
 
   let pose: Pose;
   if (isFinal) {
@@ -286,15 +314,15 @@ subscribe((s) => {
     lastRoute = s.route;
     lastStage = -1;
     route.setRoute(s.route);
+    radio.showAt(null);
     resetReply();
   }
 
   route.setStage(s.stageIndex);
   network.setLayers(s.layers);
 
-  const origin = s.originId ? (CITY_BY_ID.get(s.originId) ?? null) : null;
   starlink?.setVisible(s.starlinkOn);
-  starlink?.setOrigin(origin);
+  starlink?.setOrigin(s.origin);
 
   /*
    * Swing the globe to whatever was just chosen, however it was chosen. Tapping
@@ -306,13 +334,13 @@ subscribe((s) => {
    * Only while choosing: once both ends are set the camera director owns the
    * camera, and a focus call here would fight it.
    */
-  if (s.originId && s.originId !== lastFocusId && phaseFor(s.originId, s.destId) !== "journey") {
-    const city = CITY_BY_ID.get(s.originId);
-    if (city) controls.focusOn(city);
+  const originKey = s.origin ? `${s.origin.lat},${s.origin.lon}` : null;
+  if (s.origin && originKey !== lastFocusId && phaseFor(s.origin, s.destId) !== "journey") {
+    controls.focusOn(s.origin);
   }
-  lastFocusId = s.originId;
+  lastFocusId = originKey;
 
-  const nextPhase = phaseFor(s.originId, s.destId);
+  const nextPhase = phaseFor(s.origin, s.destId);
   if (nextPhase !== phase) {
     applyPhase(nextPhase);
     // Choosing an origin is what collapses the constellation to the satellites
@@ -402,14 +430,45 @@ loadStarlinkGateways()
   })
   .catch(() => undefined);
 
+loadPlaces()
+  .then((index) => {
+    places = index;
+    hover.setLabeller((location) => index.label(location)?.text ?? null);
+  })
+  .catch(() => undefined);
+
+loadTowers()
+  .then((index) => {
+    network.setTowers(index.towers);
+
+    // Route building can now include the radio hop. Any route already on
+    // screen was built without one, so state rebuilds it.
+    setTowerLookup((at) => {
+      const found = index.nearest(at);
+      return found ? { ...found.tower, distanceKm: found.distanceKm } : null;
+    });
+
+    const { meta } = index;
+    notes.push(
+      `Cell towers: ${meta.towerPoints.toLocaleString("en-AU")} markers standing for ` +
+        `${meta.recordedTowersRepresented.toLocaleString("en-AU")} towers recorded by OpenCelliD ` +
+        `(rasterised by the World Bank, CC BY 4.0) — one marker per 0.25° block, not one per mast.`,
+    );
+    publishNotes();
+  })
+  .catch(() => {
+    notes.push("Cell tower data failed to load.");
+    publishNotes();
+  });
+
 loadStarlink()
   .then(({ meta, satellites }) => {
     starlink = createStarlinkField(satellites);
     globe.scene.add(starlink.points, starlink.tracks);
     starlink.setVisible(state.starlinkOn);
     starlink.setPixelRatio(globe.renderer.getPixelRatio());
-    if (state.originId) {
-      starlink.setOrigin(CITY_BY_ID.get(state.originId) ?? null);
+    if (state.origin) {
+      starlink.setOrigin(state.origin);
       starlink.setIsolated(state.starlinkOn);
     }
 
@@ -446,6 +505,7 @@ function frame(now: number): void {
   earth.update(dtMs);
   route.update(dtMs);
   hover.update(dtMs);
+  radio.update(dtMs);
   starlink?.update(dtMs);
   updateReply(dtMs);
   globe.render();
