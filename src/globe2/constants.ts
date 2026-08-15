@@ -53,4 +53,11 @@ export const PALETTE = {
    * unreadable, and it has to stay separable from the warm route nodes too.
    */
   cellTower: 0xff8a5c,
+  /**
+   * Data centres. Cyan reads as "destination" against the warm tower field and
+   * the green outbound route, and stays legible when a marker is highlighted
+   * under the cursor during destination selection.
+   */
+  dataCentre: 0x36e0d8,
+  dataCentreActive: 0xffffff,
 } as const;

@@ -6,6 +6,7 @@
 // spatial index here would be complexity bought with nothing.
 
 import { dataUrl } from "./datasets";
+import { distanceKm, nearestIndex } from "./nearest";
 import type { LatLon } from "../types";
 
 /** `[lon, lat, towersInBlock]` — see scripts/fetch-towers.ts for what a point means. */
@@ -33,36 +34,6 @@ export interface Tower extends LatLon {
   towers: number;
 }
 
-const EARTH_RADIUS_KM = 6371;
-
-function toRadians(degrees: number): number {
-  return (degrees * Math.PI) / 180;
-}
-
-/** Great-circle distance in kilometres. */
-export function distanceKm(a: LatLon, b: LatLon): number {
-  const lat1 = toRadians(a.lat);
-  const lat2 = toRadians(b.lat);
-  const dLat = lat2 - lat1;
-  const dLon = toRadians(b.lon - a.lon);
-  const h = Math.sin(dLat / 2) ** 2 + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLon / 2) ** 2;
-  return 2 * EARTH_RADIUS_KM * Math.asin(Math.min(1, Math.sqrt(h)));
-}
-
-/**
- * Cheap ranking proxy for "which of these is nearest": monotonic in true
- * distance, but without the trig. Longitude is scaled by cos(lat) so it does
- * not over-weight east-west gaps near the poles.
- */
-function roughDistanceSq(from: LatLon, lat: number, lon: number): number {
-  let dLon = lon - from.lon;
-  if (dLon > 180) dLon -= 360;
-  else if (dLon < -180) dLon += 360;
-  const scaled = dLon * Math.cos(toRadians(from.lat));
-  const dLat = lat - from.lat;
-  return dLat * dLat + scaled * scaled;
-}
-
 export interface TowerIndex {
   towers: readonly PackedTower[];
   meta: TowerMeta;
@@ -75,15 +46,12 @@ export function createTowerIndex(towers: readonly PackedTower[], meta: TowerMeta
     towers,
     meta,
     nearest(to: LatLon) {
-      let bestIndex = -1;
-      let best = Infinity;
-      for (let i = 0; i < towers.length; i++) {
-        const d = roughDistanceSq(to, towers[i][1], towers[i][0]);
-        if (d < best) {
-          best = d;
-          bestIndex = i;
-        }
-      }
+      const bestIndex = nearestIndex(
+        to,
+        towers.length,
+        (i) => towers[i][1],
+        (i) => towers[i][0],
+      );
       if (bestIndex < 0) return null;
       const [lon, lat, count] = towers[bestIndex];
       const tower: Tower = { lat, lon, towers: count };
@@ -116,15 +84,12 @@ export function createPlaceIndex(places: readonly PackedPlace[]): PlaceIndex {
   return {
     places,
     label(at: LatLon) {
-      let bestIndex = -1;
-      let best = Infinity;
-      for (let i = 0; i < places.length; i++) {
-        const d = roughDistanceSq(at, places[i][1], places[i][0]);
-        if (d < best) {
-          best = d;
-          bestIndex = i;
-        }
-      }
+      const bestIndex = nearestIndex(
+        at,
+        places.length,
+        (i) => places[i][1],
+        (i) => places[i][0],
+      );
       if (bestIndex < 0) return null;
 
       const place = places[bestIndex];
