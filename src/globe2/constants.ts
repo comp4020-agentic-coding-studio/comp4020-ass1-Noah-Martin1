@@ -37,6 +37,9 @@ export const PALETTE = {
   atmosphere: 0x4c9bff,
   city: 0xdce8ff,
   route: 0x54ff8f,
+  /** The reply travelling back. Deliberately a different hue from the request
+   *  so the two directions are never confused for one another. */
+  routeReturn: 0x4fa8ff,
   routeNode: 0xffb347,
   packet: 0xffffff,
   cableTerrestrial: 0x3b5580,

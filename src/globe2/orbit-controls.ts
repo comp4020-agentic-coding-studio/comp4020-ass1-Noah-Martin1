@@ -31,6 +31,8 @@ const POLAR_LIMIT = 0.12;
 
 export interface OrbitControlsOptions {
   onTap?: (clientX: number, clientY: number) => void;
+  /** Fired the moment the user grabs the globe, so a running shot can stand down. */
+  onUserTakeControl?: () => void;
   minDistance?: number;
   maxDistance?: number;
 }
@@ -41,6 +43,10 @@ export interface OrbitControls {
   focusOn(location: LatLon): void;
   /** Re-frames the globe for the current focus rect, unless the user has zoomed. */
   refit(): void;
+  /** Stands down so the camera director can drive. */
+  suspend(): void;
+  /** Takes the camera back from wherever the director left it, without a jump. */
+  resume(): void;
   dispose(): void;
 }
 
@@ -75,6 +81,7 @@ export function attachOrbitControls(globe: GlobeScene, options: OrbitControlsOpt
 
   let focusAzimuth: number | null = null;
   let focusPolar: number | null = null;
+  let suspended = false;
 
   const activePointers = new Map<number, { x: number; y: number }>();
   let lastPinchDistance: number | null = null;
@@ -103,6 +110,8 @@ export function attachOrbitControls(globe: GlobeScene, options: OrbitControlsOpt
   // --- pointer: drag to orbit, pinch to zoom, tap to pick ---
 
   function onPointerDown(event: PointerEvent): void {
+    // Grabbing the globe always wins over a cinematic shot.
+    if (suspended) options.onUserTakeControl?.();
     activePointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
     isDragging = true;
     dragDistance = 0;
@@ -243,7 +252,37 @@ export function attachOrbitControls(globe: GlobeScene, options: OrbitControlsOpt
     setDistance(globe.fittedDistance());
   }
 
+  function suspend(): void {
+    suspended = true;
+    velocityAzimuth = 0;
+    velocityPolar = 0;
+    focusAzimuth = null;
+    focusPolar = null;
+  }
+
+  /**
+   * Rebuilds the orbit parameters from the camera's actual pose. Without this
+   * the first frame after a cinematic shot would snap back to wherever the
+   * spherical coordinates were left.
+   */
+  function resume(): void {
+    const length = Math.max(1e-6, camera.position.length());
+    distance = Math.min(maxDistance, Math.max(minDistance, length));
+    polar = Math.acos(THREE.MathUtils.clamp(camera.position.y / length, -1, 1));
+    azimuth = Math.atan2(camera.position.x, camera.position.z);
+    camera.up.set(0, 1, 0);
+    velocityAzimuth = 0;
+    velocityPolar = 0;
+    focusAzimuth = null;
+    focusPolar = null;
+    lastInteractionTime = performance.now();
+    suspended = false;
+    applyCamera();
+  }
+
   function update(dtMs: number): void {
+    if (suspended) return;
+
     if (focusAzimuth !== null && focusPolar !== null) {
       const t = Math.min(1, dtMs * 0.005);
       azimuth += (focusAzimuth - azimuth) * t;
@@ -290,5 +329,5 @@ export function attachOrbitControls(globe: GlobeScene, options: OrbitControlsOpt
 
   applyCamera();
 
-  return { update, focusOn, refit, dispose };
+  return { update, focusOn, refit, suspend, resume, dispose };
 }

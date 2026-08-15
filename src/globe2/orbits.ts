@@ -191,3 +191,62 @@ export function propagate(set: OrbitSet, julianDate: number, unitsPerKm: number,
     out[i * 3 + 2] = -ecefY * unitsPerKm;
   }
 }
+
+/**
+ * Samples one satellite's orbit as a closed ring, for drawing its track.
+ *
+ * GMST is deliberately held at `julianDate` while the satellite is swept
+ * through a full revolution. Letting the Earth turn as well would trace the
+ * ground track -- an open, drifting spiral -- whereas what reads as "this is
+ * the path it goes round on" is the orbit itself, frozen against the planet as
+ * it is right now.
+ */
+export function orbitTrack(
+  set: OrbitSet,
+  index: number,
+  julianDate: number,
+  unitsPerKm: number,
+  samples = 128,
+): Float32Array {
+  const base = index * STRIDE;
+  const elements = set.elements;
+
+  const theta = gmstRadians(julianDate);
+  const cosTheta = Math.cos(theta);
+  const sinTheta = Math.sin(theta);
+
+  const secondsSinceEpoch = (julianDate - elements[base + Field.EpochJd]) * 86400;
+  const eccentricity = elements[base + Field.Eccentricity];
+  const semiMajorAxis = elements[base + Field.SemiMajorAxis];
+  const cosIncl = elements[base + Field.CosIncl];
+  const sinIncl = elements[base + Field.SinIncl];
+
+  // Node and perigee are taken at the current instant, so the ring sits where
+  // the orbit actually is now rather than where it was at epoch.
+  const raan = elements[base + Field.Raan0] + elements[base + Field.RaanDot] * secondsSinceEpoch;
+  const argp = elements[base + Field.Argp0] + elements[base + Field.ArgpDot] * secondsSinceEpoch;
+  const cosRaan = Math.cos(raan);
+  const sinRaan = Math.sin(raan);
+
+  const points = new Float32Array((samples + 1) * 3);
+  for (let i = 0; i <= samples; i++) {
+    const meanAnomaly = (i / samples) * TWO_PI;
+    const sinM = Math.sin(meanAnomaly);
+    const cosM = Math.cos(meanAnomaly);
+    const trueAnomaly = meanAnomaly + 2 * eccentricity * sinM + 2.5 * eccentricity * eccentricity * sinM * cosM;
+    const radiusKm = semiMajorAxis * (1 - eccentricity * cosM);
+
+    const argumentOfLatitude = argp + trueAnomaly;
+    const cosU = Math.cos(argumentOfLatitude);
+    const sinU = Math.sin(argumentOfLatitude);
+
+    const eciX = radiusKm * (cosRaan * cosU - sinRaan * sinU * cosIncl);
+    const eciY = radiusKm * (sinRaan * cosU + cosRaan * sinU * cosIncl);
+    const eciZ = radiusKm * (sinU * sinIncl);
+
+    points[i * 3] = (eciX * cosTheta + eciY * sinTheta) * unitsPerKm;
+    points[i * 3 + 1] = eciZ * unitsPerKm;
+    points[i * 3 + 2] = -(-eciX * sinTheta + eciY * cosTheta) * unitsPerKm;
+  }
+  return points;
+}

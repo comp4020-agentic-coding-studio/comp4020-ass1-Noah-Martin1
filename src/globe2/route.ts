@@ -95,6 +95,14 @@ export interface RouteLayer {
   setStage(index: number): void;
   setResolution(width: number, height: number): void;
   setPixelRatio(ratio: number): void;
+  /**
+   * Draws the reply travelling home, destination back to origin. `progress`
+   * runs 0..1; null hides it. Kept separate from the request so both can be on
+   * screen at once at the end, in two colours.
+   */
+  setReturnProgress(progress: number | null): void;
+  /** World-space positions of every hop, for the camera to frame. */
+  hopPositions(): THREE.Vector3[];
   update(dtMs: number): void;
 }
 
@@ -107,6 +115,14 @@ export function createRouteLayer(): RouteLayer {
   let resolution = new THREE.Vector2(window.innerWidth, window.innerHeight);
   let stageIndex = 0;
   let elapsedMs = 0;
+  let hops: THREE.Vector3[] = [];
+
+  // --- the reply, drawn back along the route in blue ---
+
+  let returnLine: Line2 | null = null;
+  let returnMaterial: LineMaterial | null = null;
+  let returnPoints: THREE.Vector3[] = [];
+  let returnLength = 0;
 
   // --- hop markers ---
 
@@ -152,6 +168,15 @@ export function createRouteLayer(): RouteLayer {
       segment.material.dispose();
     }
     segments = [];
+    hops = [];
+    if (returnLine) {
+      group.remove(returnLine);
+      returnLine.geometry.dispose();
+      returnMaterial?.dispose();
+      returnLine = null;
+      returnMaterial = null;
+      returnPoints = [];
+    }
     if (nodePoints) {
       group.remove(nodePoints);
       nodePoints.geometry.dispose();
@@ -165,6 +190,7 @@ export function createRouteLayer(): RouteLayer {
     if (!route || route.steps.length < 2) return;
 
     const positions = route.steps.map((step) => latLonToVector3(step.location, radiusFor(step)));
+    hops = positions.map((position) => position.clone());
 
     for (let i = 1; i < route.steps.length; i++) {
       const step = route.steps[i];
@@ -209,7 +235,67 @@ export function createRouteLayer(): RouteLayer {
     nodePoints.frustumCulled = false;
     group.add(nodePoints);
 
+    buildReturnPath(route, positions);
     setStage(stageIndex);
+  }
+
+  /**
+   * One continuous polyline running destination -> origin, lifted slightly
+   * above the request so the two are legible where they overlap. Progress is
+   * animated with the dash uniforms: a single dash whose length grows to cover
+   * the line reveals it end to end without rebuilding geometry every frame.
+   */
+  function buildReturnPath(route: Route, positions: THREE.Vector3[]): void {
+    returnPoints = [];
+    for (let i = route.steps.length - 1; i > 0; i--) {
+      const step = route.steps[i];
+      const previous = route.steps[i - 1];
+      const lift = step.kind === "satellite" || previous.kind === "satellite" ? 0 : 0.045;
+      const leg = arcBetween(positions[i], positions[i - 1], lift);
+      // Drop the duplicated joint so the dash distances stay continuous.
+      returnPoints.push(...(returnPoints.length === 0 ? leg : leg.slice(1)));
+    }
+    if (returnPoints.length < 2) return;
+
+    returnLength = 0;
+    for (let i = 1; i < returnPoints.length; i++) {
+      returnLength += returnPoints[i].distanceTo(returnPoints[i - 1]);
+    }
+
+    const geometry = new LineGeometry();
+    geometry.setPositions(returnPoints.flatMap((point) => [point.x, point.y, point.z]));
+
+    returnMaterial = new LineMaterial({
+      color: PALETTE.routeReturn,
+      linewidth: 3,
+      transparent: true,
+      opacity: 0.95,
+      dashed: true,
+      dashSize: 0,
+      gapSize: returnLength * 2,
+      depthTest: true,
+    });
+    returnMaterial.resolution.copy(resolution);
+
+    returnLine = new Line2(geometry, returnMaterial);
+    returnLine.computeLineDistances();
+    returnLine.visible = false;
+    group.add(returnLine);
+  }
+
+  function setReturnProgress(progress: number | null): void {
+    if (!returnLine || !returnMaterial) return;
+    if (progress === null) {
+      returnLine.visible = false;
+      return;
+    }
+    returnLine.visible = true;
+    returnMaterial.dashSize = returnLength * Math.max(0, Math.min(1, progress));
+    returnMaterial.needsUpdate = true;
+  }
+
+  function hopPositions(): THREE.Vector3[] {
+    return hops;
   }
 
   function setStage(index: number): void {
@@ -229,6 +315,7 @@ export function createRouteLayer(): RouteLayer {
   function setResolution(width: number, height: number): void {
     resolution = new THREE.Vector2(width, height);
     for (const segment of segments) segment.material.resolution.copy(resolution);
+    returnMaterial?.resolution.copy(resolution);
   }
 
   function setPixelRatio(ratio: number): void {
@@ -253,5 +340,5 @@ export function createRouteLayer(): RouteLayer {
     packet.visible = stageIndex > 0;
   }
 
-  return { group, setRoute, setStage, setResolution, setPixelRatio, update };
+  return { group, setRoute, setStage, setResolution, setPixelRatio, setReturnProgress, hopPositions, update };
 }

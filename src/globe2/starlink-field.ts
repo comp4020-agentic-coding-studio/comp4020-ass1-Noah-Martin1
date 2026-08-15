@@ -2,8 +2,8 @@ import * as THREE from "three";
 import type { LatLon } from "../data/types";
 import { latLonToVector3 } from "../globe/geometry";
 import { reducedMotion } from "../reduced-motion";
-import { EARTH_RADIUS_KM, EARTH_RADIUS_UNITS, ORBIT_TIME_SCALE } from "./constants";
-import { buildOrbitSet, dateToJulian, propagate, type OrbitSet } from "./orbits";
+import { EARTH_RADIUS_KM, EARTH_RADIUS_UNITS, ORBIT_TIME_SCALE, PALETTE } from "./constants";
+import { buildOrbitSet, dateToJulian, orbitTrack, propagate, type OrbitSet } from "./orbits";
 
 /**
  * The whole vendored Starlink catalogue as a single point cloud.
@@ -49,6 +49,7 @@ const VERTEX = /* glsl */ `
   uniform vec3 uOriginDirection;
   uniform float uConeCos;
   uniform float uHasOrigin;
+  uniform float uIsolate;
   uniform float uSize;
   varying vec3 vColour;
   varying float vAlpha;
@@ -59,8 +60,11 @@ const VERTEX = /* glsl */ `
     // When an origin is chosen the satellites actually overhead there step
     // forward. The rest stay clearly visible -- the whole constellation is the
     // point of the picture -- they just sit back to about half strength.
+    // Isolating goes further and removes them outright, which is what makes
+    // "only the satellites that can serve you" legible.
     float overhead = step(uConeCos, dot(normalize(position), uOriginDirection));
-    float prominence = mix(1.0, mix(0.5, 1.0, overhead), uHasOrigin);
+    float dimmed = mix(1.0, mix(0.5, 1.0, overhead), uHasOrigin);
+    float prominence = mix(dimmed, overhead, uIsolate);
 
     vColour = aColour;
     vAlpha = prominence;
@@ -85,13 +89,33 @@ const FRAGMENT = /* glsl */ `
 
 export interface StarlinkField {
   points: THREE.Points;
+  /** Faint pulsing orbit rings for the satellites currently serving the origin. */
+  tracks: THREE.LineSegments;
   count: number;
   setVisible(visible: boolean): void;
   /** Restricts prominence to satellites overhead the given location. */
   setOrigin(location: LatLon | null): void;
+  /**
+   * Hides everything that cannot serve the origin and draws orbit rings for
+   * what remains, rather than merely dimming the rest.
+   */
+  setIsolated(isolated: boolean): void;
+  /**
+   * Multiplier on the 10x default, so 1 is the browsing speed and 0.1 is real
+   * time — which is what makes a single relay hop readable.
+   */
+  setTimeScale(scale: number): void;
+  /** Indices of the satellites currently overhead the origin, nearest zenith first. */
+  servingSatellites(): number[];
+  /** Current world position of one satellite, for aiming the camera at it. */
+  positionOf(index: number, out: THREE.Vector3): THREE.Vector3;
   setPixelRatio(ratio: number): void;
   update(dtMs: number): void;
 }
+
+/** How many orbit rings to draw at once. Every serving satellite would be a
+ *  thicket; a handful reads as "these are the ones that can see you". */
+const MAX_TRACKS = 8;
 
 /**
  * Central angle within which a satellite is usable from the ground. Derived
@@ -132,6 +156,7 @@ export function createStarlinkField(records: readonly { line1: string; line2: st
       uOriginDirection: { value: new THREE.Vector3(1, 0, 0) },
       uConeCos: { value: usableConeCos(550) },
       uHasOrigin: { value: 0 },
+      uIsolate: { value: 0 },
       uSize: { value: 2.4 },
     },
     vertexShader: VERTEX,
@@ -145,41 +170,171 @@ export function createStarlinkField(records: readonly { line1: string; line2: st
   points.frustumCulled = false;
   points.visible = false;
 
+  // --- orbit rings for the serving satellites ---
+
+  const TRACK_SAMPLES = 128;
+  const trackPositions = new Float32Array(MAX_TRACKS * TRACK_SAMPLES * 2 * 3);
+  const trackGeometry = new THREE.BufferGeometry();
+  const trackAttribute = new THREE.BufferAttribute(trackPositions, 3);
+  trackAttribute.setUsage(THREE.DynamicDrawUsage);
+  trackGeometry.setAttribute("position", trackAttribute);
+  trackGeometry.boundingSphere = new THREE.Sphere(new THREE.Vector3(), EARTH_RADIUS_UNITS * 2);
+
+  const trackMaterial = new THREE.LineBasicMaterial({
+    color: PALETTE.satelliteActive,
+    transparent: true,
+    opacity: 0,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending,
+  });
+  const tracks = new THREE.LineSegments(trackGeometry, trackMaterial);
+  tracks.frustumCulled = false;
+  tracks.visible = false;
+
   const startJulianDate = dateToJulian(Date.now());
+  const unitsPerKm = EARTH_RADIUS_UNITS / EARTH_RADIUS_KM;
   let simulatedSeconds = 0;
   let visible = false;
+  let isolated = false;
+  let timeScale = 1;
+  let originDirection: THREE.Vector3 | null = null;
+  let serving: number[] = [];
+  let pulseSeconds = 0;
 
   // Seed positions immediately so the first frame after switching Starlink on
   // is already correct rather than showing everything stacked at the origin.
-  propagate(set, startJulianDate, EARTH_RADIUS_UNITS / EARTH_RADIUS_KM, positions);
+  propagate(set, startJulianDate, unitsPerKm, positions);
   positionAttribute.needsUpdate = true;
+
+  function currentJulianDate(): number {
+    return startJulianDate + simulatedSeconds / 86400;
+  }
 
   function setVisible(next: boolean): void {
     visible = next;
     points.visible = next;
+    tracks.visible = next && isolated;
   }
 
   function setOrigin(location: LatLon | null): void {
     if (!location) {
+      originDirection = null;
+      serving = [];
       material.uniforms.uHasOrigin.value = 0;
       return;
     }
-    const direction = latLonToVector3(location, 1).normalize();
-    (material.uniforms.uOriginDirection.value as THREE.Vector3).copy(direction);
+    originDirection = latLonToVector3(location, 1).normalize();
+    (material.uniforms.uOriginDirection.value as THREE.Vector3).copy(originDirection);
     material.uniforms.uHasOrigin.value = 1;
+    recomputeServing();
+  }
+
+  /** Satellites inside the usable cone, ordered by how close to overhead they are. */
+  function recomputeServing(): void {
+    if (!originDirection) {
+      serving = [];
+      return;
+    }
+    const coneCos = material.uniforms.uConeCos.value as number;
+    const found: { index: number; alignment: number }[] = [];
+    for (let i = 0; i < set.count; i++) {
+      const x = positions[i * 3];
+      const y = positions[i * 3 + 1];
+      const z = positions[i * 3 + 2];
+      const length = Math.hypot(x, y, z) || 1;
+      const alignment = (x * originDirection.x + y * originDirection.y + z * originDirection.z) / length;
+      if (alignment >= coneCos) found.push({ index: i, alignment });
+    }
+    found.sort((a, b) => b.alignment - a.alignment);
+    serving = found.map((entry) => entry.index);
+  }
+
+  function rebuildTracks(): void {
+    const julianDate = currentJulianDate();
+    const chosen = serving.slice(0, MAX_TRACKS);
+    let cursor = 0;
+
+    for (const index of chosen) {
+      const ring = orbitTrack(set, index, julianDate, unitsPerKm, TRACK_SAMPLES);
+      // Expand the polyline into discrete segments so every ring lives in the
+      // one LineSegments buffer and costs a single draw call.
+      for (let i = 0; i < TRACK_SAMPLES; i++) {
+        trackPositions[cursor++] = ring[i * 3];
+        trackPositions[cursor++] = ring[i * 3 + 1];
+        trackPositions[cursor++] = ring[i * 3 + 2];
+        trackPositions[cursor++] = ring[(i + 1) * 3];
+        trackPositions[cursor++] = ring[(i + 1) * 3 + 1];
+        trackPositions[cursor++] = ring[(i + 1) * 3 + 2];
+      }
+    }
+    trackPositions.fill(0, cursor);
+    trackAttribute.needsUpdate = true;
+    trackGeometry.setDrawRange(0, (cursor / 3) | 0);
+  }
+
+  function setIsolated(next: boolean): void {
+    isolated = next;
+    material.uniforms.uIsolate.value = next ? 1 : 0;
+    tracks.visible = visible && next;
+    if (next) {
+      recomputeServing();
+      rebuildTracks();
+    }
+  }
+
+  function setTimeScale(scale: number): void {
+    timeScale = Math.max(0, scale);
+  }
+
+  function servingSatellites(): number[] {
+    return serving;
+  }
+
+  function positionOf(index: number, out: THREE.Vector3): THREE.Vector3 {
+    return out.set(positions[index * 3], positions[index * 3 + 1], positions[index * 3 + 2]);
   }
 
   function setPixelRatio(ratio: number): void {
     material.uniforms.uPixelRatio.value = ratio;
   }
 
+  let sinceServingRefresh = 0;
+
   function update(dtMs: number): void {
     if (!visible) return;
-    if (!reducedMotion.value) simulatedSeconds += (dtMs / 1000) * ORBIT_TIME_SCALE;
-    const julianDate = startJulianDate + simulatedSeconds / 86400;
-    propagate(set, julianDate, EARTH_RADIUS_UNITS / EARTH_RADIUS_KM, positions);
+
+    if (!reducedMotion.value) {
+      simulatedSeconds += (dtMs / 1000) * ORBIT_TIME_SCALE * timeScale;
+      pulseSeconds += dtMs / 1000;
+    }
+    propagate(set, currentJulianDate(), unitsPerKm, positions);
     positionAttribute.needsUpdate = true;
+
+    if (!isolated) return;
+
+    // Which satellites can see the origin genuinely changes as they move, so
+    // the set is refreshed periodically rather than frozen at selection time.
+    sinceServingRefresh += dtMs;
+    if (sinceServingRefresh > 900) {
+      sinceServingRefresh = 0;
+      recomputeServing();
+      rebuildTracks();
+    }
+
+    trackMaterial.opacity = reducedMotion.value ? 0.32 : 0.18 + 0.22 * (0.5 + 0.5 * Math.sin(pulseSeconds * 2.2));
   }
 
-  return { points, count: set.count, setVisible, setOrigin, setPixelRatio, update };
+  return {
+    points,
+    tracks,
+    count: set.count,
+    setVisible,
+    setOrigin,
+    setIsolated,
+    setTimeScale,
+    servingSatellites,
+    positionOf,
+    setPixelRatio,
+    update,
+  };
 }
