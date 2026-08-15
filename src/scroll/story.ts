@@ -68,6 +68,13 @@ export function createStoryPanel(): StoryPanel {
 
     observer = new IntersectionObserver(
       (entries) => {
+        // At the bottom several stages are fully visible at once, so whichever
+        // wins on ratio is arbitrary. Being at the end is unambiguous, and it
+        // has to win, or the journey never formally completes.
+        if (atBottom()) {
+          setStageIndex(route.steps.length);
+          return;
+        }
         let best: { index: number; ratio: number } | null = null;
         for (const entry of entries) {
           if (!entry.isIntersecting) continue;
@@ -80,6 +87,16 @@ export function createStoryPanel(): StoryPanel {
     );
     for (const section of list.children) observer.observe(section);
   }
+
+  function atBottom(): boolean {
+    return el.scrollTop + el.clientHeight >= el.scrollHeight - 12;
+  }
+
+  // The observer only fires when an intersection actually changes, which a
+  // final few pixels of scrolling may not do -- so watch the scroll too.
+  el.addEventListener("scroll", () => {
+    if (lastRoute && atBottom()) setStageIndex(lastRoute.steps.length);
+  });
 
   subscribe((s) => {
     if (s.route !== lastRoute) {

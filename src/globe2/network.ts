@@ -109,6 +109,10 @@ function buildMarkers(
 export interface NetworkLayer {
   group: THREE.Group;
   setLayers(layers: LayerVisibility): void;
+  /** Swaps the schematic backbone for the real submarine cable network. */
+  setCables(segments: readonly (readonly [number, number][])[]): void;
+  /** Swaps the modelled ground stations for real Starlink gateway sites. */
+  setGateways(points: readonly (readonly [number, number])[]): void;
   setPixelRatio(ratio: number): void;
 }
 
@@ -143,7 +147,22 @@ export function createNetworkLayer(): NetworkLayer {
     opacity: 0.28,
     depthWrite: false,
   });
-  group.add(new THREE.LineSegments(cableGeometry, cableMaterial));
+  /*
+   * The real cable network carries no per-vertex colour, and a vertexColors
+   * material with no colour attribute reads WebGL's default (0,0,0) — which
+   * drew the whole submarine network as black scribble over the globe. It gets
+   * its own flat material, tinted submarine blue.
+   */
+  const realCableMaterial = new THREE.LineBasicMaterial({
+    color: PALETTE.cableSubmarine,
+    transparent: true,
+    opacity: 0.2,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending,
+  });
+  // The schematic backbone stands in until the real cable network loads.
+  const schematicCables = new THREE.LineSegments(cableGeometry, cableMaterial);
+  group.add(schematicCables);
 
   // --- markers, one Points per layer so a toggle is a single uniform write ---
 
@@ -151,23 +170,86 @@ export function createNetworkLayer(): NetworkLayer {
   const serverCities = CITIES.filter((city) => city.kinds.includes("server"));
 
   const towers = buildMarkers(towerCities, PALETTE.routeNode, Glyph.Diamond, 4.5);
-  const groundStations = buildMarkers(GROUND_STATIONS, PALETTE.groundStation, Glyph.Ring, 6);
+  let groundStations = buildMarkers(GROUND_STATIONS, PALETTE.groundStation, Glyph.Ring, 6);
   const servers = buildMarkers(serverCities, PALETTE.satelliteActive, Glyph.Square, 5);
 
   for (const markers of [towers, groundStations, servers]) group.add(markers.points);
 
+  let layerState: LayerVisibility = { fibre: false, towers: false, groundStations: false, servers: false };
+  let pixelRatio = Math.min(window.devicePixelRatio || 1, 2);
+
+  // --- real submarine cables, once they load ---
+
+  let realCables: THREE.LineSegments | null = null;
+
+  /**
+   * Replaces the schematic hub-to-hub arcs with the published cable network.
+   * The arcs stay in the scene graph but are hidden: they still describe which
+   * hops a route may take, whereas these lines describe where cable actually
+   * runs, and the two should never be confused for each other.
+   */
+  function setCables(segments: readonly (readonly [number, number][])[]): void {
+    if (realCables) {
+      group.remove(realCables);
+      realCables.geometry.dispose();
+    }
+
+    const points: number[] = [];
+    const vector = new THREE.Vector3();
+    const radius = EARTH_RADIUS_UNITS * 1.0015;
+
+    for (const line of segments) {
+      for (let i = 1; i < line.length; i++) {
+        const [lonA, latA] = line[i - 1];
+        const [lonB, latB] = line[i];
+        latLonToVector3({ lat: latA, lon: lonA }, radius, vector);
+        points.push(vector.x, vector.y, vector.z);
+        latLonToVector3({ lat: latB, lon: lonB }, radius, vector);
+        points.push(vector.x, vector.y, vector.z);
+      }
+    }
+
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute("position", new THREE.Float32BufferAttribute(points, 3));
+    realCables = new THREE.LineSegments(geometry, realCableMaterial);
+    group.add(realCables);
+
+    schematicCables.visible = false;
+  }
+
+  function setGateways(gateways: readonly (readonly [number, number])[]): void {
+    group.remove(groundStations.points);
+    groundStations.points.geometry.dispose();
+    groundStations.material.dispose();
+
+    groundStations = buildMarkers(
+      gateways.map(([lon, lat]) => ({ lat, lon })),
+      PALETTE.groundStation,
+      Glyph.Ring,
+      5.5,
+    );
+    groundStations.material.uniforms.uPixelRatio.value = pixelRatio;
+    group.add(groundStations.points);
+    setLayers(layerState);
+  }
+
   function setLayers(layers: LayerVisibility): void {
-    cableMaterial.opacity = layers.fibre ? 0.85 : 0.28;
+    layerState = layers;
+    cableMaterial.opacity = layers.fibre ? 0.9 : 0.24;
+    // 724 systems is a lot of line; the "on" state has to read as emphasis, not
+    // as a mesh that swallows the coastlines underneath it.
+    realCableMaterial.opacity = layers.fibre ? 0.55 : 0.14;
     towers.material.uniforms.uOpacity.value = layers.towers ? 0.95 : 0.22;
     groundStations.material.uniforms.uOpacity.value = layers.groundStations ? 0.95 : 0.22;
     servers.material.uniforms.uOpacity.value = layers.servers ? 0.95 : 0.3;
   }
 
   function setPixelRatio(ratio: number): void {
+    pixelRatio = ratio;
     for (const markers of [towers, groundStations, servers]) {
       markers.material.uniforms.uPixelRatio.value = ratio;
     }
   }
 
-  return { group, setLayers, setPixelRatio };
+  return { group, setLayers, setCables, setGateways, setPixelRatio };
 }

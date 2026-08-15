@@ -20,6 +20,19 @@ const LAYER_LABELS: Record<keyof LayerVisibility, string> = {
   servers: "Servers",
 };
 
+/*
+ * On a 390px screen the four full labels wrap onto a second row, and that row
+ * is taken straight out of the globe's height. The short forms keep all four
+ * togglable in one row; the full label stays as the accessible name so nothing
+ * is lost to a screen reader.
+ */
+const LAYER_SHORT: Record<keyof LayerVisibility, string> = {
+  fibre: "Fibre",
+  towers: "5G",
+  groundStations: "Ground",
+  servers: "Servers",
+};
+
 export interface ControlPanel {
   el: HTMLElement;
   setFeedback(message: string | null): void;
@@ -109,11 +122,17 @@ export function createControlPanel(): ControlPanel {
     label.className = "pill";
     const input = document.createElement("input");
     input.type = "checkbox";
+    input.setAttribute("aria-label", LAYER_LABELS[key]);
     input.addEventListener("change", () => setLayer(key, input.checked));
     layerInputs[key] = input;
-    const text = document.createElement("span");
-    text.textContent = LAYER_LABELS[key];
-    label.append(input, text);
+    const full = document.createElement("span");
+    full.className = "pill-full";
+    full.textContent = LAYER_LABELS[key];
+    const short = document.createElement("span");
+    short.className = "pill-short";
+    short.setAttribute("aria-hidden", "true");
+    short.textContent = LAYER_SHORT[key];
+    label.append(input, full, short);
     layersFieldset.append(label);
   }
 
@@ -139,8 +158,16 @@ export function createControlPanel(): ControlPanel {
     }
   });
 
+  // Initial sync: subscribe() only fires on change, so the controls have to be
+  // seeded from the starting state or the Starlink switch would read "off"
+  // while the constellation is on screen.
   originSelect.value = state.originId ?? "";
   destSelect.value = state.destId ?? "";
+  starlinkInput.checked = state.starlinkOn;
+  for (const key of Object.keys(LAYER_LABELS) as (keyof LayerVisibility)[]) {
+    const input = layerInputs[key];
+    if (input) input.checked = state.layers[key];
+  }
 
   return { el, setFeedback };
 }

@@ -42,27 +42,18 @@ Routes shown by the prototype may be fictionalised, but they should be based on 
 
 ---
 
-# Core Interaction
+# Core Interaction - the website MUST follow this flow:
 
-The main experience should revolve around a globe in the centre of the page.
 
-The user should be able to:
+load website, globe centered, starlink enabled, -> visually we see the globe slowly spinning with milky way and stars behind it. The satellites are orbittingat 10x their real speed. We see a prompt box asking us to select a loaction to send internet request. we hover our cursor over the the earth, in locations where starlink is avaliable (to send request from) there is a small green circle under the cursor to indicate where youre going to select the first location. If the circle is red a prompt near your cursor will say “sorry! no connection here”. After selecting the senf from location and starlink is selected, make all the satellites not orbiting over the send location dissapear, and the ones that orbit over the loaction, have their orbit line appear in a faint way, pulsing to show their orbit path. Then the same selection process will happen for the send to location, green circle where allowed and red for not allowed. 
 
-- Rotate the globe.
-- Zoom in and out.
-- Select an origin location.
-- Select a destination.
-- Choose between a specific route and a random route.
-- Toggle Starlink on or off.
-- Progress through the route by scrolling.
-- Learn something at every major step of the journey.
-- Toggle infrastructure layers/highlights.
+these events will be controlled through the scroll, on the main page.
 
-The main heading is:
+If starlink is selected, and the traceroute is going through starlink, i want the traceroute to be a animated interactive path showing its direction and signal. First i want the satelities to slow down - to their real speed and the camera to zoom in on the signal going from earth to the satellite, showing it from a horizontal view, visualising the vertical travel to space. Then it zooms out and the webiste shows the signal moving to other satelites, connecting them (these are actual satelleits the websites use before orbiting the earth - so if it needs to unhide them for this then it needs to do that. the satellites will be travelling very slow for this so its clear whats happening) then it goes through the next nodes (starlink base station etc etc). as it goes through each node provide facts for how it works. Once the traceroute reaches its destination, zoom completely out for the route to be in view.
 
-> Visualise your internet requests
+Once the traceroute for the packet send is in view, animate the response treace route wuth a different colour - make it a blue traceroute rather than green, in one higher view make it animated to show its path.
 
-The default state should be simple and visually calm rather than immediately displaying every possible infrastructure layer.
+
 
 ---
 
@@ -408,9 +399,13 @@ For example:
 
 The Starlink mode itself should use a clear on/off control.
 
-Starlink should be **OFF by default**.
+**Superseded:** this section originally required Starlink to be OFF by default. The later
+"Core Interaction — the website MUST follow this flow" section requires the page to load with
+Starlink **enabled** and the constellation already orbiting, and that is what the build does.
 
-This is important because the default experience should not initially overwhelm the user with hundreds of satellites.
+The original concern still stands and is answered differently: the default view is kept calm by
+isolating the constellation once an origin is chosen, and by leaving every infrastructure layer at
+low emphasis until its toggle is switched on — not by hiding the satellites at load.
 
 ---
 
@@ -668,6 +663,8 @@ When trade-offs are necessary, prioritise in this order:
 10. Decorative polish.
 
 A smaller, coherent and understandable visualisation is better than a technically ambitious but confusing prototype.
+
+Check that the modelling doesnt break - check that when the website is opened and closed - switch tabs and returned to - doesn't change the webistes visuals.
 
 ---
 

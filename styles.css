@@ -158,6 +158,56 @@ canvas:focus-visible {
   text-align: center;
 }
 
+/* --- flow prompt and the hover cursor's message --- */
+
+#prompt-host {
+  flex: 0 0 auto;
+  display: flex;
+  justify-content: center;
+  padding: 0 16px 10px;
+  pointer-events: none;
+}
+
+.prompt {
+  max-width: 46ch;
+  text-align: center;
+  background: var(--panel-bg);
+  border: 1px solid var(--hair);
+  border-radius: 12px;
+  padding: 9px 16px;
+  backdrop-filter: blur(12px);
+}
+
+.prompt-title {
+  margin: 0;
+  font-size: 0.92rem;
+  font-weight: 600;
+}
+
+.prompt-detail {
+  margin: 3px 0 0;
+  font-size: 0.76rem;
+  line-height: 1.4;
+  color: var(--muted);
+}
+
+/*
+ * Follows the pointer, so it must never intercept it — the click underneath is
+ * the whole point of the interaction.
+ */
+.hover-tip {
+  position: fixed;
+  z-index: 5;
+  pointer-events: none;
+  background: rgb(24 6 10 / 92%);
+  border: 1px solid rgb(255 90 106 / 55%);
+  color: #ffd9de;
+  border-radius: 8px;
+  padding: 5px 9px;
+  font-size: 0.74rem;
+  white-space: nowrap;
+}
+
 .data-note {
   margin: 0;
   max-width: 62ch;
@@ -165,6 +215,34 @@ canvas:focus-visible {
   line-height: 1.45;
   color: var(--muted);
   text-align: center;
+}
+
+.data-sources {
+  pointer-events: auto;
+  max-width: 62ch;
+  font-size: 0.68rem;
+  line-height: 1.45;
+  color: var(--muted);
+  text-align: center;
+}
+
+.data-sources summary {
+  cursor: pointer;
+  font-family: var(--font-display);
+  font-size: 0.64rem;
+  letter-spacing: 0.04em;
+}
+
+.data-sources summary:hover {
+  color: var(--ink);
+}
+
+.data-sources p {
+  margin: 4px 0 0;
+}
+
+.pill-short {
+  display: none;
 }
 
 /* --- control panel --- */
@@ -510,6 +588,19 @@ canvas:focus-visible {
   .data-note {
     font-size: 0.58rem;
     line-height: 1.35;
+  }
+
+  .data-sources {
+    font-size: 0.58rem;
+    line-height: 1.35;
+  }
+
+  .pill-full {
+    display: none;
+  }
+
+  .pill-short {
+    display: inline;
   }
 
   .story {

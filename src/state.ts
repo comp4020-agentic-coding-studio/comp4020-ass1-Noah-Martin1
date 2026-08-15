@@ -24,7 +24,10 @@ const listeners = new Set<Listener>();
 export const state: AppState = {
   originId: null,
   destId: null,
-  starlinkOn: false,
+  // The flow opens on Starlink: the constellation is the first thing the user
+  // sees orbiting, and selection is gated on Starlink's coverage from the
+  // outset. (This supersedes the earlier "Starlink off by default" default.)
+  starlinkOn: true,
   route: null,
   stageIndex: 0,
   layers: { fibre: false, towers: false, groundStations: false, servers: false },
