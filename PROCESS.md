@@ -97,6 +97,41 @@ independently of whichever route is selected.
    eyes
    ([`6b61e09`](https://github.com/comp4020-agentic-coding-studio/comp4020-ass1-Noah-Martin1/commit/6b61e09)).
 
+6. **Chasing a data source back to its origin.** The brief asked for the fibre
+   paths that `geotraceroute.com` uses. Rather than approximating them, I read
+   its credits panel and its `cables-full.json`, found verbatim TeleGeography
+   slugs, and traced it to TeleGeography's Submarine Cable Map. Their published
+   GitHub mirror is a 404 now, so the data came from the live v3 API instead —
+   724 systems, correctly attributed under CC BY-SA in the interface
+   ([`525261a`](https://github.com/comp4020-agentic-coding-studio/comp4020-ass1-Noah-Martin1/commit/525261a)).
+   The same instinct fixed the coverage question: instead of hand-compiling a
+   list of Starlink countries, I found SpaceX's own `availability.json`. The
+   reference image is captioned "30,000 satellites", but the real catalogue
+   holds 10,753 — I showed all of them and printed the honest count rather than
+   padding the sky with satellites that do not exist.
+
+7. **Trusting the screenshot over the code.** Two bugs this phase were invisible
+   in review and obvious on screen. The submarine cables drew as *black*
+   scribble across the globe: `setCables` reused a `vertexColors` material, and
+   geometry with no colour attribute reads WebGL's default `(0,0,0)`. And
+   choosing "Sydney" from the From menu left the camera over the Americas —
+   only a globe *tap* had ever called `focusOn`, so the one moment the selection
+   needed to be obvious was the one moment it was off-screen
+   ([`4517dfb`](https://github.com/comp4020-agentic-coding-studio/comp4020-ass1-Noah-Martin1/commit/4517dfb),
+   [`d606fe7`](https://github.com/comp4020-agentic-coding-studio/comp4020-ass1-Noah-Martin1/commit/d606fe7)).
+   A third only appeared by measuring: the mobile globe had quietly shrunk to
+   149px, eaten by a six-line data note and a wrapping row of pills. The fix was
+   to decide what actually had to stay visible — the "not a live traceroute"
+   disclaimer — and put the per-dataset attributions behind a disclosure.
+
+8. **Resolving a contradiction in the brief instead of silently picking one.**
+   `CLAUDE.md` said Starlink must be **off** by default; the later "MUST follow
+   this flow" section said the page loads with it **on**. I followed the newer
+   requirement and then went back and marked the older section superseded,
+   recording *why* the original concern (don't overwhelm the user) is still met
+   — by isolating the constellation on selection and keeping every layer at low
+   emphasis — rather than leaving two rules in the repo that disagree.
+
 ## Before you ship
 
 `pnpm check:evidence` verifies your citations resolve to real commits, that the
