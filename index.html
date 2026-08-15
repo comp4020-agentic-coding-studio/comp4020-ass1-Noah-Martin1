@@ -12,26 +12,38 @@
   </head>
   <body>
     <a class="skip-link" href="#story-host">Skip to route explanation</a>
-    <header class="site-header">
-      <h1>Visualise your internet requests</h1>
-      <nav aria-label="Primary">
-        <a href="./" aria-current="page">Home</a>
-      </nav>
-    </header>
-    <main class="experience">
-      <section class="globe-column" aria-label="Globe">
-        <div
-          id="globe-stage"
-          role="img"
-          aria-label="Interactive 3D globe of Earth at night, with city lights, drifting clouds and a starfield. Drag to rotate, scroll or pinch to zoom, and tap a populated location to select it as a request's origin or destination."
-        >
-          <div class="gloss" aria-hidden="true"></div>
+
+    <!-- Full-bleed: space runs edge to edge at any window size, and the globe is
+         framed inside it by #globe-focus rather than by the canvas bounds. -->
+    <canvas
+      id="globe-canvas"
+      tabindex="0"
+      role="application"
+      aria-label="Interactive 3D globe of Earth in space. Drag or use the arrow keys to orbit, scroll or press plus and minus to zoom, and tap a populated location to select it as a request's origin or destination."
+    ></canvas>
+
+    <div class="ui">
+      <header class="site-header">
+        <h1>Visualise your internet requests</h1>
+        <nav aria-label="Primary">
+          <a href="./" aria-current="page">Home</a>
+        </nav>
+      </header>
+
+      <div class="stage-column">
+        <!-- Layout anchor only: CSS decides where the globe should be centred,
+             and the renderer reads this element's box each resize. -->
+        <div id="globe-focus" aria-hidden="true"></div>
+        <div class="stage-foot">
+          <p class="hint">Drag to rotate · scroll to zoom · tap a city to select it</p>
+          <div id="control-panel-host"></div>
+          <p id="data-note" class="data-note" role="status" aria-live="polite"></p>
         </div>
-        <p class="hint">Drag to rotate · scroll to zoom · tap a city to select it</p>
-        <div id="control-panel-host"></div>
-      </section>
+      </div>
+
       <aside id="story-host" aria-label="Journey of the request"></aside>
-    </main>
+    </div>
+
     <script type="module" src="./src/main.ts"></script>
   </body>
 </html>

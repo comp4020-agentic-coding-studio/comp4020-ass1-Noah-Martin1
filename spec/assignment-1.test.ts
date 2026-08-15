@@ -19,11 +19,27 @@ describe("home page markup", () => {
     expect(h1?.textContent?.trim()).toBe("Visualise your internet requests");
   });
 
-  it("presents the globe as an accessible, labelled region", () => {
-    const stage = doc.getElementById("globe-stage");
+  // The globe is a full-bleed canvas the user can orbit, zoom and pick on --
+  // including from the keyboard -- so it must carry an interactive role and be
+  // focusable. (It was previously a static div labelled role="img"; that role
+  // would now actively misdescribe it to a screen reader.)
+  it("presents the globe as an accessible, focusable, labelled control", () => {
+    const stage = doc.getElementById("globe-canvas");
     expect(stage).toBeTruthy();
-    expect(stage?.getAttribute("role")).toBe("img");
+    expect(stage?.tagName.toLowerCase()).toBe("canvas");
+    expect(stage?.getAttribute("role")).toBe("application");
+    expect(stage?.getAttribute("tabindex")).toBe("0");
     expect(stage?.getAttribute("aria-label")?.length ?? 0).toBeGreaterThan(20);
+  });
+
+  it("anchors the globe's framing to a layout element", () => {
+    // The renderer centres the planet on this box, which is what keeps the
+    // layout working at sizes other than the two marked viewports.
+    expect(doc.getElementById("globe-focus")).toBeTruthy();
+  });
+
+  it("discloses that routes and orbits are simplified, not live", () => {
+    expect(doc.getElementById("data-note")).toBeTruthy();
   });
 
   it("has mount points for the controls and the route story", () => {
