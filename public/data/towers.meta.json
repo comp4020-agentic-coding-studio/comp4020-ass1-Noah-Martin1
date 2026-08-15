@@ -1,0 +1,28 @@
+{
+  "source": "OpenCelliD, rasterised by the World Bank (Global OpenCelliD cell tower map)",
+  "sourceUrl": "https://datacatalogfiles.worldbank.org/ddh-published/0038043/1/DR0046250/opencellid_global_1km_int.tif",
+  "landingPage": "https://datacatalog.worldbank.org/search/dataset/0038043/global-opencellid-cell-tower-map",
+  "upstream": "https://www.opencellid.org/",
+  "licence": "World Bank Data Catalog, Creative Commons Attribution 4.0 (CC BY 4.0). Derived from OpenCelliD, which is CC BY-SA 4.0 — credit both.",
+  "snapshot": "OpenCelliD repository downloaded 2020-07-01 by the World Bank and gridded at 30 arc-seconds.",
+  "fetchedAt": "2026-08-15T13:52:39Z",
+  "raster": {
+    "width": 43200,
+    "height": 21600,
+    "degreesPerPixel": 0.008333333333333333,
+    "origin": [
+      -180,
+      90
+    ]
+  },
+  "method": "Stratified pick: the globe is divided into 0.25° blocks and the single densest 1 km cell in each block that contains any recorded tower is kept, positioned at that cell's centre. The third value in each triple is the total recorded towers in the whole block, not in that one cell.",
+  "towerPoints": 91497,
+  "populatedBlocks": 91497,
+  "recordedTowersRepresented": 40449133,
+  "caveats": [
+    "Marker positions are 1 km grid cells, not surveyed mast locations.",
+    "OpenCelliD is crowd-sourced, so coverage is denser where contributors are active — absence of a marker is not proof there is no tower.",
+    "All radio generations are counted together; the snapshot does not distinguish 5G from older cells.",
+    "One marker stands for a whole block, so the drawn count is far smaller than the number of real towers."
+  ]
+}

@@ -44,12 +44,20 @@ type GeoJsonFeature = {
 type FeatureCollection = { type: "FeatureCollection"; features: GeoJsonFeature[] };
 
 type PlaceFeature = {
-  properties: { scalerank?: number; pop_max?: number };
+  properties: { scalerank?: number; pop_max?: number; name?: string; adm1name?: string; adm0name?: string };
   geometry: { type: "Point"; coordinates: [number, number] };
 };
 
 /** One city as the globe wants it: [lon, lat, popRank]. */
 export type PackedCity = [number, number, number];
+
+/**
+ * The same places again, but keeping the names, for answering "what am I
+ * hovering over?". Separate from cities.json because the globe draws thousands
+ * of these dots every frame and has no use for a string; only the one place
+ * nearest the cursor ever needs a name.
+ */
+export type NamedPlace = [number, number, string, string, string];
 
 function round(value: number, dp = DP): number {
   const factor = 10 ** dp;
@@ -113,6 +121,21 @@ export function packCities(features: PlaceFeature[]): PackedCity[] {
   });
 }
 
+/**
+ * Keeps three decimals here rather than two: this set is used to measure how
+ * far the cursor is from the named place, and rounding to ~1 km would show up
+ * directly in that number.
+ */
+export function packNamedPlaces(features: PlaceFeature[]): NamedPlace[] {
+  return features
+    .filter((feature) => typeof feature.properties.name === "string" && feature.properties.name.length > 0)
+    .map((feature) => {
+      const [lon, lat] = feature.geometry.coordinates;
+      const props = feature.properties;
+      return [round(lon, 3), round(lat, 3), props.name ?? "", props.adm1name ?? "", props.adm0name ?? ""];
+    });
+}
+
 function write(name: string, contents: string): number {
   const path = join(OUT_DIR, name);
   writeFileSync(path, contents);
@@ -146,6 +169,11 @@ async function main(): Promise<void> {
   console.log(
     `✓ public/data/cities.json: ${cities.length} cities, ${sizeCities} bytes (from ${places.bytes})`,
   );
+
+  const named = packNamedPlaces(places.value.features);
+  if (named.length === 0) throw new Error("named places came back empty");
+  const sizeNamed = write("places.json", JSON.stringify(named));
+  console.log(`✓ public/data/places.json: ${named.length} named places, ${sizeNamed} bytes`);
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
