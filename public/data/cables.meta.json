@@ -1,0 +1,10 @@
+{
+  "source": "TeleGeography Submarine Cable Map (API v3)",
+  "sourceUrl": "https://www.submarinecablemap.com/api/v3/cable/cable-geo.json",
+  "fetchedAt": "2026-08-15T12:23:03Z",
+  "cableCount": 724,
+  "landingCount": 1908,
+  "licence": "TeleGeography publishes the Submarine Cable Map under Creative Commons Attribution-ShareAlike 4.0 International (CC BY-SA 4.0): the map may be used in other work provided TeleGeography is credited. Their commercial geocoded dataset is separately licensed; this snapshot uses only the openly published map API.",
+  "note": "Published cable routes are indicative geography, not exact seabed survey lines.",
+  "geotracerouteFinding": "geotraceroute.com credits submarinecablemap.com for its submarine cable data and serves a self-hosted copy at /world/cables-full.json whose cable and landing ids are TeleGeography's slugs verbatim, so it is the same upstream dataset."
+}
