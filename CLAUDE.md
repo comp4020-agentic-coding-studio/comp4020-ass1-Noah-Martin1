@@ -47,7 +47,9 @@ Routes shown by the prototype may be fictionalised, but they should be based on 
 
 load website, globe centered, starlink enabled, -> visually we see the globe slowly spinning with milky way and stars behind it. The satellites are orbittingat 10x their real speed. We see a prompt box asking us to select a loaction to send internet request. we hover our cursor over the the earth, in locations where starlink is avaliable (to send request from) there is a small green circle under the cursor to indicate where youre going to select the first location. Next to the cursor and green circle will be the location you are hovering over. Now, this location might not be connected to the internt via fiber cabling. In this case, and when starlink is not selected, we assume its connected via 5g towers. for example if we select "white cliffs NSW Australia" we visualise a radio waves coming from the nearest 5g tower, and the signla propergating throughh this to the nearest network core (via fiber optic).
 
-If the circle is red a prompt near your cursor will say “sorry! no connection here”. After selecting the senf from location and starlink is selected, make all the satellites not orbiting over the send location dissapear, and the ones that orbit over the loaction, have their orbit line appear in a faint way, pulsing to show their orbit path. Then the same selection process will happen for the send to location, green circle where allowed and red for not allowed. 
+If the circle is red a prompt near your cursor will say “sorry! no connection here”. After selecting the send from location and starlink is selected, make all the satellites not orbiting over the send location dissapear, and the ones that orbit over the loaction, have their orbit line appear in a faint way, pulsing to show their orbit path. 
+
+Then the same selection process will happen for the send to location: green circle where allowed and red for not allowed, and again, where the user clicks as the send to location is the destination where the traceroute should end up 
 
 these events will be controlled through the scroll, on the main page.
 
