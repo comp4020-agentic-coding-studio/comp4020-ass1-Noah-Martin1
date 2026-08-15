@@ -728,6 +728,47 @@ Do not fabricate process evidence after the fact.
 
 ---
 
+# Implementation Decisions
+
+These are settled. Do not rediscover or quietly reverse them.
+
+## Where the rendering lives
+
+Active rendering is `src/globe2/`. The earlier `src/globe/` is the superseded prototype, kept because the process history is marked; only `src/globe/geometry.ts` is still shared (and it is covered by the spec tests). Do not add features to `src/globe/`.
+
+## The camera orbits; the Earth does not spin
+
+The Earth is fixed in world space and the camera orbits it (`src/globe2/orbit-controls.ts`). This is not a stylistic choice:
+
+- The stars, Milky Way, sun and moon live in world space, so orbiting the camera sweeps them past naturally, which is the behaviour the reference (satellitemap.space) has.
+- Rotating the globe group instead leaves the sky nailed in place and forces a faked star-parallax hack, which is what the first implementation did.
+
+So: never rotate the globe group to represent user input, and never parent sky objects to the camera.
+
+## Framing is layout-driven, not canvas-driven
+
+The canvas is fixed and fills the window so space runs edge to edge. The planet is centred on `#globe-focus`, an invisible CSS layout box, read each resize and applied through `camera.setViewOffset` (an off-axis frustum shift, so nothing skews).
+
+This is why the layout works at any resolution instead of only `1920×1080` and `390×844`. Those two sizes are what gets *marked*; they are not the only sizes that must work. Never size the renderer to a fixed box or hard-code either viewport.
+
+## Data is vendored, never fetched from third parties at runtime
+
+`public/data/` holds snapshots produced by `scripts/fetch-starlink.ts` and `scripts/fetch-geodata.ts` (CelesTrak GP catalogue; Natural Earth land and populated places). Always load them through `dataUrl()` in `src/data/generated/datasets.ts` — `base` is `"./"` for GitHub Pages, so an absolute `/data/...` fetch works locally and 404s once deployed.
+
+## Orbits: Kepler + J2, and say so
+
+`src/globe2/orbits.ts` propagates the whole catalogue with Keplerian motion plus the J2 secular terms, not full SGP4. It is accurate for a fresh snapshot of near-circular LEO and cheap enough to run across ~10,700 satellites every frame.
+
+The `#data-note` element states the satellite count, the snapshot date, that the model is simplified, and that motion is at 10× speed. **If the propagation, data source or speed changes, that disclosure changes with it.** Never let the UI imply a live feed or an exact ephemeris.
+
+## Performance: the cost is fill-rate, not object count
+
+Measured, not assumed: drawing all ~10,700 satellites costs roughly nothing (one draw call, a few flops each), while frame rate tracks pixel count. The expensive thing is the bloom pass.
+
+So the scene times itself and steps quality down (`notifyFrame` in `src/globe2/scene.ts`); `?quality=high` or `?quality=low` pins a tier, which is how to take reproducible screenshots on a machine whose GPU differs from the viewer's. Before optimising anything here, measure which of the two it is — headless Chromium runs on SwiftShader and is not representative of real hardware.
+
+---
+
 # This File Is Living Documentation
 
 Update this `CLAUDE.md` when the project develops a recurring convention, constraint, architectural decision, or lesson that future agent work should know.

@@ -14,11 +14,18 @@ be less work than I expected, because it reused almost all of the terrestrial
 route-building logic instead of duplicating it for a satellite-only path.
 
 **What this changed about who I want to be as a developer** is a bias toward
-measuring instead of eyeballing. Twice in this project a screenshot looked
-fine at first glance while the underlying layout was wrong — a non-square globe
-using half its available space, and a `<select>` silently overflowing on
-mobile — and both only surfaced once I scripted the browser to actually read
-`clientWidth`/`clientHeight` and compare them. I want to carry that habit
-forward: a check that measures a real number is worth more than a check that
-asks "does this look right," because "looks right" is exactly the case where a
-subtle layout bug hides.
+measuring instead of eyeballing — and, more specifically, toward measuring
+before optimising. When the globe dropped to 7fps with all 10,753 satellites on
+screen, the satellites were the obvious suspect and cutting them down was the
+obvious fix. Measuring took ten minutes and showed the opposite: turning the
+satellites off changed nothing, while shrinking the window quadrupled the frame
+rate. The cost was the bloom pass, not the objects. Had I trusted the obvious
+reading I would have thrown away the exact thing the visualisation is *for* —
+the density of a real constellation — to fix a problem it wasn't causing.
+
+The same lesson showed up quietly in layout, where screenshots that "looked
+fine" hid a globe box that wasn't square and a `<select>` overflowing its
+container; both only surfaced once I read the real numbers out of the DOM. I
+want to be the kind of developer who treats "this looks right" as a hypothesis
+rather than a result, because looking right is precisely the condition under
+which the wrong fix is most tempting.

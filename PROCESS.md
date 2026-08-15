@@ -63,21 +63,39 @@ independently of whichever route is selected.
    path — confirming the model falls back correctly rather than guessing from a
    screenshot.
 
-4. **Finding the desktop globe was wasting most of its column.** A visual
-   screenshot at 1920×1080 looked fine at a glance, but measuring the actual
-   rendered box with Playwright (`clientWidth`/`clientHeight` on `#globe-stage`)
-   showed 640×780 — not square, and using well under half the available
-   1540px-wide column. The cause was `flex: 1 1 auto` in the flex-column
-   `.globe-column` fighting the element's own `aspect-ratio: 1`, with a flat
-   `640px` width cap on top. I fixed it by changing to `flex: 0 1 auto` and
-   sizing width as `min(90%, 70vh, 900px)` — a viewport-height-based formula
-   instead of a fixed pixel cap — so the globe scales to fill whichever
-   dimension (width or height) is actually the constraint
+4. **Rebuilding against reference images, and letting the sky decide the
+   architecture.** I was given two reference images — satellitemap.space's
+   constellation view and a traceroute globe — and asked to match them. The
+   obvious reading was "restyle the globe". The thing that actually mattered
+   was subtler: the reference wants the stars to sweep when you drag. My
+   implementation rotated the *globe* under a fixed camera, which leaves the
+   sky nailed in place; it had a fudge factor multiplying star rotation to fake
+   parallax. Matching the reference properly meant inverting it — fix the Earth
+   in world space and orbit the *camera*
+   ([`b882de0`](https://github.com/comp4020-agentic-coding-studio/comp4020-ass1-Noah-Martin1/commit/b882de0)).
+   Once that was right the sun, moon and Milky Way needed no special handling
+   at all: being in world space, they sweep for free. The faked parallax
+   constant disappeared rather than being retuned, which is how I knew the new
+   model was the correct one rather than just a different one.
+
+5. **Measuring which thing was actually slow.** With all 10,753 satellites
+   drawing, the page ran at 7fps and the obvious culprit was the satellites. I
+   measured instead of optimising: satellites off gave 8fps, satellites on gave
+   9fps, and shrinking the window to 640×400 gave 50fps. Frame rate tracked
+   *pixel count*, not object count — so the constellation was nearly free and
+   the bloom post-processing pass was the whole cost. That inverted the fix:
+   instead of decimating the satellites (which would have destroyed the exact
+   density the reference is about), I left all of them and made rendering
+   quality adaptive, with the scene timing itself and stepping down on machines
+   that can't afford bloom
+   ([`b882de0`](https://github.com/comp4020-agentic-coding-studio/comp4020-ass1-Noah-Martin1/commit/b882de0)).
+   That took a software-rasterised 1080p frame from 8fps to 26fps with the full
+   catalogue still on screen. I'd also found the same lesson earlier in the
+   layout: a screenshot that "looked fine" at 1920×1080 was hiding a globe box
+   measuring 640×780 — not square, using under half its column — which only
+   surfaced once I read `clientWidth`/`clientHeight` instead of trusting my
+   eyes
    ([`6b61e09`](https://github.com/comp4020-agentic-coding-studio/comp4020-ass1-Noah-Martin1/commit/6b61e09)).
-   Re-measuring afterward confirmed a square 756×756 box on desktop and a
-   square 337×337 box on mobile, where before neither viewport had produced a
-   square globe — the kind of layout bug a static screenshot at one moment can
-   miss but a measured assertion cannot.
 
 ## Before you ship
 
