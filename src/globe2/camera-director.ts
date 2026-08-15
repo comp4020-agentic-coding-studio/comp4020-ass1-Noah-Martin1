@@ -147,6 +147,34 @@ export function nodePose(direction: THREE.Vector3): Pose {
 }
 
 /**
+ * Frames one leg of a terrestrial journey: camera over the midpoint, pulled
+ * back just far enough to hold both ends.
+ *
+ * The height follows the length of the leg, which is what makes the sequence
+ * tell the story by itself. A device-to-mast hop is a few kilometres and the
+ * camera drops right down onto the ground; the transcontinental fibre legs that
+ * follow pull steadily back. Nothing has to special-case "zoom in on the first
+ * jump" — the first jump is simply the shortest.
+ */
+export function groundLegPose(a: THREE.Vector3, b: THREE.Vector3): Pose {
+  const midpoint = a.clone().add(b).multiplyScalar(0.5);
+  const outward = midpoint.clone().normalize();
+  const separation = a.distanceTo(b);
+  /*
+   * The floor is generous on purpose. A device-to-mast hop is a few kilometres,
+   * and framing it tightly filled the screen with featureless ground — the shot
+   * stopped reading as a planet at all. CLAUDE.md asks for close "but still
+   * clearly on a globe", so the closest shot still holds a region in frame.
+   */
+  const height = Math.min(EARTH_RADIUS_UNITS * 1.6, Math.max(EARTH_RADIUS_UNITS * 0.42, separation * 1.25));
+  return {
+    position: outward.clone().multiplyScalar(EARTH_RADIUS_UNITS + height),
+    target: midpoint.clone().normalize().multiplyScalar(EARTH_RADIUS_UNITS),
+    up: new THREE.Vector3(0, 1, 0),
+  };
+}
+
+/**
  * Pulls back far enough to hold every point of the route at once, looking down
  * the average of them so the whole path sits in frame.
  */

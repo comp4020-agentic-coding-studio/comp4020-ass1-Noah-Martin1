@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import type { LatLon } from "../data/types";
-import { vector3ToLatLon } from "../globe/geometry";
+import { latLonToVector3, vector3ToLatLon } from "../globe/geometry";
 import { EARTH_RADIUS_UNITS } from "./constants";
 import { surfacePointAt } from "./picking";
 import type { GlobeScene } from "./scene";
@@ -51,6 +51,15 @@ export interface HoverCursor {
   /** Only shown while the user is actually being asked to choose a place. */
   setEnabled(enabled: boolean): void;
   setPredicate(predicate: CoveragePredicate | null): void;
+  /**
+   * Optional magnet. When set, the ring jumps to whatever this returns for the
+   * pointed-at spot instead of sitting under the pointer — that is what makes
+   * "the cursor snaps to the nearest data centre" true rather than approximate.
+   * Returning null means nothing is in reach, which is a miss, not an error.
+   */
+  setSnap(snap: ((location: LatLon) => (LatLon & { name?: string }) | null) | null): void;
+  /** The snapped target under the cursor, if any. */
+  readonly snapped: (LatLon & { name?: string }) | null;
   /** Resolves the hovered point to a place name shown beside the cursor. */
   setLabeller(labeller: ((location: LatLon) => string | null) | null): void;
   /** Message shown beside the pointer when the location has no service. */
@@ -101,6 +110,8 @@ export function createHoverCursor(globe: GlobeScene, host: HTMLElement): HoverCu
 
   let predicate: CoveragePredicate | null = null;
   let labeller: ((location: LatLon) => string | null) | null = null;
+  let snap: ((location: LatLon) => (LatLon & { name?: string }) | null) | null = null;
+  let snapped: (LatLon & { name?: string }) | null = null;
   let enabled = false;
   let covered = false;
   let blockedMessage = "sorry! no connection here";
@@ -123,6 +134,11 @@ export function createHoverCursor(globe: GlobeScene, host: HTMLElement): HoverCu
     labeller = next;
   }
 
+  function setSnap(next: ((location: LatLon) => (LatLon & { name?: string }) | null) | null): void {
+    snap = next;
+    snapped = null;
+  }
+
   function setBlockedMessage(message: string): void {
     blockedMessage = message;
   }
@@ -131,6 +147,7 @@ export function createHoverCursor(globe: GlobeScene, host: HTMLElement): HoverCu
     group.visible = false;
     tooltip.hidden = true;
     covered = false;
+    snapped = null;
   }
 
   function track(clientX: number, clientY: number): void {
@@ -145,8 +162,17 @@ export function createHoverCursor(globe: GlobeScene, host: HTMLElement): HoverCu
       return;
     }
 
-    const location = vector3ToLatLon(point);
-    covered = predicate ? predicate(location) : true;
+    const pointed = vector3ToLatLon(point);
+
+    /*
+     * With a magnet fitted, the ring reports the target rather than the pointer,
+     * and "is this usable?" becomes "did anything come within reach?".
+     */
+    snapped = snap ? snap(pointed) : null;
+    const location = snapped ?? pointed;
+    covered = snap ? snapped !== null : predicate ? predicate(location) : true;
+
+    if (snapped) latLonToVector3(snapped, EARTH_RADIUS_UNITS, point);
 
     // Lift the ring clear of the surface so it never z-fights the terrain.
     surfaceNormal.copy(point).normalize();
@@ -164,7 +190,8 @@ export function createHoverCursor(globe: GlobeScene, host: HTMLElement): HoverCu
      * own, and on the green side it is the confirmation that you are about to
      * start the request from the place you think you are.
      */
-    const place = labeller ? labeller(location) : null;
+    // A snapped target names itself; a free point is named by where it is.
+    const place = snapped?.name || (labeller ? labeller(location) : null);
     placeLine.textContent = place ?? "";
     placeLine.hidden = !place;
     statusLine.textContent = covered ? "" : blockedMessage;
@@ -203,6 +230,10 @@ export function createHoverCursor(globe: GlobeScene, host: HTMLElement): HoverCu
     setEnabled,
     setPredicate,
     setLabeller,
+    setSnap,
+    get snapped() {
+      return snapped;
+    },
     setBlockedMessage,
     track,
     clear,

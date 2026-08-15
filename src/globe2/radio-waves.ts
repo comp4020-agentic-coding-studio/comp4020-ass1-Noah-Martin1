@@ -15,8 +15,16 @@ import { EARTH_RADIUS_UNITS, PALETTE } from "./constants";
 
 const RING_COUNT = 3;
 const PERIOD_SECONDS = 1.9;
-/** Roughly a 250 km footprint — a mast's reach, not a continent's. */
-const MAX_RADIUS = EARTH_RADIUS_UNITS * 0.075;
+
+/*
+ * The rings are sized from the hop they represent rather than fixed, because a
+ * fixed footprint was wrong in both directions: drawn large enough to see from
+ * orbit it claimed a ~480 km cell radius, and at the close camera the shot was
+ * nothing but expanding green. Clamped so a 1 km hop is still visible and a
+ * 60 km one does not swallow the frame.
+ */
+const MIN_RADIUS = EARTH_RADIUS_UNITS * 0.012;
+const MAX_RADIUS = EARTH_RADIUS_UNITS * 0.05;
 
 const VERTEX = /* glsl */ `
   varying vec2 vUv;
@@ -45,8 +53,11 @@ const FRAGMENT = /* glsl */ `
 
 export interface RadioWaves {
   group: THREE.Group;
-  /** Pass the mast's location to start, or null to stop. */
-  showAt(location: LatLon | null): void;
+  /**
+   * Pass the mast's location to start, or null to stop. `reachUnits` is how far
+   * the hop actually travelled, so the rings match the distance being explained.
+   */
+  showAt(location: LatLon | null, reachUnits?: number): void;
   update(dtMs: number): void;
   dispose(): void;
 }
@@ -78,6 +89,8 @@ export function createRadioWaves(): RadioWaves {
     rings.push({ mesh, material });
   }
 
+  let radius = MAX_RADIUS;
+
   const normal = new THREE.Vector3();
   const position = new THREE.Vector3();
   const quaternion = new THREE.Quaternion();
@@ -94,18 +107,21 @@ export function createRadioWaves(): RadioWaves {
        * rings stay — they simply sit at fixed radii instead of travelling.
        */
       if (reducedMotion) {
-        const scale = MAX_RADIUS * (2 * (i + 1)) / (RING_COUNT + 1);
+        const scale = radius * (2 * (i + 1)) / (RING_COUNT + 1);
         mesh.scale.setScalar(scale);
         rings[i].material.uniforms.uOpacity.value = 0.5;
       }
     }
   }
 
-  function showAt(location: LatLon | null): void {
+  function showAt(location: LatLon | null, reachUnits?: number): void {
     if (!location) {
       group.visible = false;
       return;
     }
+    // A little wider than the hop itself, so the tower sits inside its own
+    // footprint rather than on its edge.
+    radius = Math.min(MAX_RADIUS, Math.max(MIN_RADIUS, (reachUnits ?? MIN_RADIUS) * 1.8));
     latLonToVector3(location, EARTH_RADIUS_UNITS * 1.005, position);
     normal.copy(position).normalize();
     quaternion.setFromUnitVectors(planeNormal, normal);
@@ -122,7 +138,7 @@ export function createRadioWaves(): RadioWaves {
       // Staggered so one ring is always leaving the mast as another arrives at
       // the edge, which is what reads as "transmitting" rather than "pulsing".
       const phase = (elapsed / PERIOD_SECONDS + i / RING_COUNT) % 1;
-      rings[i].mesh.scale.setScalar(Math.max(0.0001, phase * MAX_RADIUS * 2));
+      rings[i].mesh.scale.setScalar(Math.max(0.0001, phase * radius * 2));
       // Fade out as it expands; the leading edge is where the energy is.
       rings[i].material.uniforms.uOpacity.value = (1 - phase) * 0.85;
     }

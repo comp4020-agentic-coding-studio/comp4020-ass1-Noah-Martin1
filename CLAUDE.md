@@ -49,13 +49,15 @@ load website, globe centered, starlink enabled, -> visually we see the globe slo
 
 If the circle is red a prompt near your cursor will say “sorry! no connection here”. After selecting the send from location and starlink is selected, make all the satellites not orbiting over the send location dissapear, and the ones that orbit over the loaction, have their orbit line appear in a faint way, pulsing to show their orbit path. 
 
-Then the same selection process will happen for the send to location: green circle where allowed and red for not allowed, and again, where the user clicks as the send to location is the destination where the traceroute should end up 
+The destination process is a different selection process, destination should be one of the major data-centers located around the world. For this selection process, I want the data centers to be visble, in a new colour and a bit larger than the cell towers - to make it obvious where it is. This means that if the "servers" toggle is off, the data centers are temporarly shown for this selection process. Now, i want the cursor to snap to the closest data center highlighting the data center that the cursor is over and providing its loacation. this shoudl be implemented without limiting the users ability to grab and spin the globe. so the snap radius mustnt be too large. These data centers should be connected to the "servers" slider that toggles their visibility. 
 
 these events will be controlled through the scroll, on the main page.
 
 If starlink is selected, and the traceroute is going through starlink, i want the traceroute to be a animated interactive path showing its direction and signal. First i want the satelities to slow down - to their real speed and the camera to zoom in on the signal going from earth to the satellite, showing it from a horizontal view, visualising the vertical travel to space. Then it zooms out and the webiste shows the signal moving to other satelites, connecting them (these are actual satelleits the websites use before orbiting the earth - so if it needs to unhide them for this then it needs to do that. the satellites will be travelling very slow for this so its clear whats happening) then it goes through the next nodes (starlink base station etc etc). as it goes through each node provide facts for how it works. Once the traceroute reaches its destination, zoom completely out for the route to be in view.
 
-Once the traceroute for the packet send is in view, animate the response treace route wuth a different colour - make it a blue traceroute rather than green, in one higher view make it animated to show its path.
+if starlink isnt selected, i want the camera to zoom into the first traceroute jumps, if the first one is cell tower, it zooms into the request loaction, providing informatoin about hwo the cell tower moves the packet request. The user scrolling will control the progress of the packet moving to the next node and so on until it reaches the destination server.
+
+Either way via starlink or not, Once the traceroute for the packet send is in view, animate the response treace route wuth a different colour - make it a blue traceroute rather than green, in one higher view make it animated to show its path.
 
 
 
@@ -765,6 +767,16 @@ Two things about that file will bite anyone who touches the script:
 
 - **Its strips are not in row order.** Row 0 begins 629 MB into a 933 MB file and 284 rows are stored back near the front. Read `StripOffsets`; assuming the pixels are one contiguous block after the header silently puts London, Paris and Sydney on empty ocean.
 - **The selection is stratified, not top-N.** One marker per 0.25° block that has any tower at all. Ranking globally by density keeps city centres and deletes the countryside — which is the exact case the 5G story exists to explain.
+
+### Data centres: OpenStreetMap, and why not PeeringDB
+
+`scripts/fetch-datacentres.ts` reads OSM's `telecom=data_center` via Overpass (ODbL, 4,469 sites).
+
+**Do not switch this to PeeringDB.** It is the better registry and it was evaluated and rejected: its AUP reserves all rights, forbids passing data "on in bulk to any other person or organization unless approved", and lists demographic mapping and commercial applications as excluded purposes. Vendoring its facilities into a public repo and deploying them is exactly the bulk redistribution that policy prohibits. Check the licence before vendoring any dataset — being the best data source is not the same as being a usable one.
+
+Tier comes from how many mapped sites share an operator, so it describes operator size and makes no claim about an individual building.
+
+Overpass notes: it answers 406 to `fetch()`'s default `text/plain` body (send the query as a form field), and rate-limits hard, so the script tries several mirrors and takes `--from <file>` for a response already on disk.
 
 ## The origin is a point, not a city
 

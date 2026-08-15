@@ -1,17 +1,26 @@
 import { cableSegments, loadCableMeta, loadCables } from "./data/generated/cables";
 import { loadCoverage, loadStarlinkGateways, type Coverage } from "./data/generated/coverage";
+import { loadDataCentres, type DataCentreIndex } from "./data/generated/datacentres";
 import { loadCities, loadLand, loadStarlink, type PackedCity } from "./data/generated/datasets";
 import { loadPlaces, loadTowers, type PlaceIndex } from "./data/generated/towers";
-import type { LatLon, Route, RouteOrigin } from "./data/types";
+import type { LatLon, Route, RouteDestination, RouteOrigin } from "./data/types";
 import { haversineKm } from "./globe/geometry";
-import { createCameraDirector, nodePose, overviewPose, relayPose, uplinkPose, type Pose } from "./globe2/camera-director";
+import {
+  createCameraDirector,
+  groundLegPose,
+  nodePose,
+  overviewPose,
+  relayPose,
+  uplinkPose,
+  type Pose,
+} from "./globe2/camera-director";
 import { createEarth } from "./globe2/earth";
 import { createHoverCursor } from "./globe2/hover-cursor";
 import { bakeLandTexture } from "./globe2/land-texture";
 import { createNetworkLayer } from "./globe2/network";
 import { attachOrbitControls } from "./globe2/orbit-controls";
 import { createRadioWaves } from "./globe2/radio-waves";
-import { locationAt, nearestCityWithKind } from "./globe2/picking";
+import { locationAt } from "./globe2/picking";
 import { createRouteLayer } from "./globe2/route";
 import { createGlobeScene } from "./globe2/scene";
 import { createSky } from "./globe2/sky";
@@ -96,6 +105,28 @@ function coveredAt(location: LatLon): boolean {
 }
 
 let places: PlaceIndex | null = null;
+let dataCentres: DataCentreIndex | null = null;
+
+/**
+ * How far the destination cursor will reach to grab a data centre.
+ *
+ * Deliberately small. The brief asks for the cursor to snap, but a generous
+ * radius turns the whole globe into one big button and the user loses the
+ * ability to drag and spin without accidentally selecting something. 350 km is
+ * roughly a marker's own visual footprint at the default zoom.
+ */
+const SNAP_KM = 350;
+
+function snapToDataCentre(location: LatLon): RouteDestination | null {
+  const found = dataCentres?.nearest(location, SNAP_KM);
+  if (!found) return null;
+  const { centre } = found;
+  const where = places?.label(centre)?.text;
+  // A mapped site without a name still needs to be nameable, so fall back to
+  // where it is rather than showing an empty label.
+  const label = centre.name || (where ? `Data centre near ${where}` : "Data centre");
+  return { lat: centre.lat, lon: centre.lon, label, cityId: null };
+}
 
 /**
  * What to call a bare lat/lon. Natural Earth carries ~7,300 places, so a remote
@@ -145,9 +176,9 @@ function releaseShot(): void {
 
 type Phase = "choose-origin" | "choose-destination" | "journey";
 
-function phaseFor(origin: RouteOrigin | null, destId: string | null): Phase {
+function phaseFor(origin: RouteOrigin | null, destination: RouteDestination | null): Phase {
   if (!origin) return "choose-origin";
-  if (!destId) return "choose-destination";
+  if (!destination) return "choose-destination";
   return "journey";
 }
 
@@ -165,6 +196,22 @@ function applyPhase(next: Phase): void {
   const choosing = next !== "journey";
   hover.setEnabled(choosing);
 
+  /*
+   * Two different questions, so two different cursors. Choosing an origin asks
+   * "is there service at this exact point?", and the ring follows the pointer
+   * freely. Choosing a destination asks "which data centre?", so the ring snaps
+   * to the nearest one and the field is forced bright regardless of the Servers
+   * toggle — you cannot pick from a set you cannot see.
+   */
+  const pickingDestination = next === "choose-destination";
+  network.setDataCentreEmphasis(pickingDestination);
+  // Keep the committed origin on screen while the second end is being chosen.
+  network.markOrigin(pickingDestination ? state.origin : null);
+  hover.setSnap(pickingDestination ? (location) => dataCentres?.nearest(location, SNAP_KM)?.centre ?? null : null);
+  hover.setPredicate(pickingDestination ? null : coveredAt);
+  hover.setBlockedMessage(pickingDestination ? "no data centre here" : "sorry! no connection here");
+  if (!pickingDestination) network.highlightDataCentre(null);
+
   if (next === "choose-origin") {
     const gesture = coarsePointer.matches ? "Press and drag over the globe" : "Hover the globe";
     prompt.show(
@@ -174,7 +221,10 @@ function applyPhase(next: Phase): void {
         : `${gesture} — green means there's mobile coverage. Tap to choose.`,
     );
   } else if (next === "choose-destination") {
-    prompt.show("Now pick where it's going.", "Choose the server you're trying to reach.");
+    prompt.show(
+      "Now pick where it's going.",
+      "The cyan markers are real data centres — the cursor snaps to the nearest one. Tap to choose.",
+    );
   } else {
     prompt.show("Scroll to follow the request.", "Each step explains what the network is doing.");
   }
@@ -188,12 +238,11 @@ const controls = attachOrbitControls(globe, {
     const location = locationAt(globe, clientX, clientY);
     if (!location) return; // tapped empty space, not the planet
 
-    if (!coveredAt(location)) {
-      panel.setFeedback("sorry! no connection here — try somewhere more populated.");
-      return;
-    }
-
     if (phase === "choose-origin") {
+      if (!coveredAt(location)) {
+        panel.setFeedback("sorry! no connection here — try somewhere more populated.");
+        return;
+      }
       /*
        * The origin is the point that was tapped, full stop. It used to snap to
        * the nearest modelled city, which quietly moved a request from White
@@ -205,21 +254,27 @@ const controls = attachOrbitControls(globe, {
       return;
     }
 
-    // The destination is a data centre, and those really are in specific
-    // places, so this one does snap — and says so when the jump is a long one.
-    const nearest = nearestCityWithKind(location, "server");
-    if (!nearest) return;
-    panel.setFeedback(
-      nearest.distanceKm > 400
-        ? `Nearest modelled data centre: ${nearest.city.name} (${Math.round(nearest.distanceKm)} km away).`
-        : null,
-    );
-    controls.focusOn(nearest.city);
-    setDestination(nearest.city.id);
+    /*
+     * The destination is a different kind of choice: a request ends at a real
+     * data centre, not at an arbitrary field. So this one snaps — but only
+     * within SNAP_KM, so a tap on open ocean is a miss rather than a silent
+     * jump to a facility on another continent.
+     */
+    const snapped = snapToDataCentre(location);
+    if (!snapped) {
+      panel.setFeedback("No data centre near there — the highlighted markers are the ones you can pick.");
+      return;
+    }
+    panel.setFeedback(null);
+    controls.focusOn(snapped);
+    setDestination(snapped);
   },
 });
 
-canvas.addEventListener("pointermove", (event) => hover.track(event.clientX, event.clientY));
+canvas.addEventListener("pointermove", (event) => {
+  hover.track(event.clientX, event.clientY);
+  if (phase === "choose-destination") network.highlightDataCentre(hover.snapped);
+});
 canvas.addEventListener("pointerleave", () => hover.clear());
 
 window.addEventListener("resize", reframe);
@@ -254,8 +309,10 @@ function playBeat(current: Route, stageIndex: number): void {
   // signal is hopping between.
   starlink?.setIsolated(state.starlinkOn && step.infra !== "satellite-link");
 
-  // The one hop that travels through the air gets rings spreading off the mast.
-  radio.showAt(step.visual === "radio" ? step.location : null);
+  // The one hop that travels through the air gets rings spreading off the mast,
+  // sized to the distance the radio actually covered.
+  const reach = index > 0 ? hops[index - 1].distanceTo(hops[index]) : undefined;
+  radio.showAt(step.visual === "radio" ? step.location : null, reach);
 
   let pose: Pose;
   if (isFinal) {
@@ -264,8 +321,16 @@ function playBeat(current: Route, stageIndex: number): void {
     pose = uplinkPose(hops[Math.max(0, index - 1)]);
   } else if (step.infra === "satellite-link") {
     pose = relayPose(hops[Math.max(0, index - 1)], hops[index]);
-  } else {
+  } else if (index === 0) {
     pose = nodePose(hops[index]);
+  } else {
+    /*
+     * Terrestrial legs frame both ends, so the camera dives to the ground for
+     * the few-kilometre hop to the mast and pulls back as the legs lengthen.
+     * That is the "zoom into the first traceroute jumps" the flow asks for, and
+     * it falls out of the geometry rather than being special-cased per stage.
+     */
+    pose = groundLegPose(hops[index - 1], hops[index]);
   }
 
   playShot(pose, isFinal ? 2400 : 1700);
@@ -335,12 +400,12 @@ subscribe((s) => {
    * camera, and a focus call here would fight it.
    */
   const originKey = s.origin ? `${s.origin.lat},${s.origin.lon}` : null;
-  if (s.origin && originKey !== lastFocusId && phaseFor(s.origin, s.destId) !== "journey") {
+  if (s.origin && originKey !== lastFocusId && phaseFor(s.origin, s.destination) !== "journey") {
     controls.focusOn(s.origin);
   }
   lastFocusId = originKey;
 
-  const nextPhase = phaseFor(s.origin, s.destId);
+  const nextPhase = phaseFor(s.origin, s.destination);
   if (nextPhase !== phase) {
     applyPhase(nextPhase);
     // Choosing an origin is what collapses the constellation to the satellites
@@ -436,6 +501,25 @@ loadPlaces()
     hover.setLabeller((location) => index.label(location)?.text ?? null);
   })
   .catch(() => undefined);
+
+loadDataCentres()
+  .then((index) => {
+    dataCentres = index;
+    network.setDataCentres(index.centres);
+    // If the user is already at the destination step, arm the magnet now.
+    if (phase === "choose-destination") applyPhase(phase);
+
+    const { meta } = index;
+    notes.push(
+      `Data centres: ${meta.count.toLocaleString("en-AU")} mapped sites, © OpenStreetMap contributors (ODbL) — ` +
+        `coverage is uneven, so an unmarked region may be unmapped rather than empty.`,
+    );
+    publishNotes();
+  })
+  .catch(() => {
+    notes.push("Data centre locations failed to load.");
+    publishNotes();
+  });
 
 loadTowers()
   .then((index) => {
