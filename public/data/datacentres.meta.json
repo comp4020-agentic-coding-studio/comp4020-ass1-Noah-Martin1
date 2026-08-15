@@ -1,0 +1,19 @@
+{
+  "source": "OpenStreetMap, telecom=data_center (nodes and building outlines)",
+  "sourceUrl": "https://overpass-api.de/api/interpreter",
+  "licence": "© OpenStreetMap contributors, Open Database Licence (ODbL). Reuse with attribution; derived databases share alike.",
+  "fetchedAt": "2026-08-15T14:51:54Z",
+  "rejectedSource": "PeeringDB was evaluated and not used: its AUP reserves all rights and forbids bulk redistribution without prior permission.",
+  "count": 4469,
+  "tiers": {
+    "major": 1046,
+    "significant": 425,
+    "regional": 2998
+  },
+  "method": "Ways are reduced to their centroid. Tier is derived from how many mapped sites share an operator (50+ major, 10+ significant), which stands in for how large an operator is — it is not a judgement about an individual building.",
+  "caveats": [
+    "OpenStreetMap coverage is uneven: a region with no marker may be unmapped rather than empty.",
+    "A centroid is the middle of a mapped outline, not the building entrance or the equipment inside it.",
+    "Not every mapped site is a public cloud region; many are private or enterprise facilities."
+  ]
+}
