@@ -129,7 +129,7 @@ async function readTiffLayout(file: FileHandle): Promise<TiffLayout> {
     if (entry.count * size <= 4) return [entry.valueOrOffset];
     const buf = Buffer.alloc(entry.count * size);
     await file.read(buf, 0, buf.length, entry.valueOrOffset);
-    const out: number[] = new Array<number>(entry.count);
+    const out: number[] = Array.from({ length: entry.count }, () => 0);
     for (let i = 0; i < entry.count; i++) {
       out[i] = size === 2 ? buf.readUInt16LE(i * 2) : buf.readUInt32LE(i * 4);
     }

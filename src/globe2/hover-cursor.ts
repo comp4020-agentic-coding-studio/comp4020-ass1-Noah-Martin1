@@ -51,6 +51,8 @@ export interface HoverCursor {
   /** Only shown while the user is actually being asked to choose a place. */
   setEnabled(enabled: boolean): void;
   setPredicate(predicate: CoveragePredicate | null): void;
+  /** Resolves the hovered point to a place name shown beside the cursor. */
+  setLabeller(labeller: ((location: LatLon) => string | null) | null): void;
   /** Message shown beside the pointer when the location has no service. */
   setBlockedMessage(message: string): void;
   /** Feed a pointer position; pass null when the pointer leaves the window. */
@@ -89,9 +91,16 @@ export function createHoverCursor(globe: GlobeScene, host: HTMLElement): HoverCu
   tooltip.hidden = true;
   tooltip.setAttribute("role", "status");
   tooltip.setAttribute("aria-live", "polite");
+
+  const placeLine = document.createElement("span");
+  placeLine.className = "hover-tip-place";
+  const statusLine = document.createElement("span");
+  statusLine.className = "hover-tip-status";
+  tooltip.append(placeLine, statusLine);
   host.append(tooltip);
 
   let predicate: CoveragePredicate | null = null;
+  let labeller: ((location: LatLon) => string | null) | null = null;
   let enabled = false;
   let covered = false;
   let blockedMessage = "sorry! no connection here";
@@ -108,6 +117,10 @@ export function createHoverCursor(globe: GlobeScene, host: HTMLElement): HoverCu
 
   function setPredicate(next: CoveragePredicate | null): void {
     predicate = next;
+  }
+
+  function setLabeller(next: ((location: LatLon) => string | null) | null): void {
+    labeller = next;
   }
 
   function setBlockedMessage(message: string): void {
@@ -144,19 +157,33 @@ export function createHoverCursor(globe: GlobeScene, host: HTMLElement): HoverCu
     (material.uniforms.uColour.value as THREE.Color).copy(covered ? RING_COLOUR_OK : RING_COLOUR_BLOCKED);
     group.visible = true;
 
-    if (covered) {
+    /*
+     * The label rides along with the ring in both states. Knowing *where* you
+     * are pointing is what makes the green/red answer mean anything -- "no
+     * connection here" is far more informative next to "Coral Sea" than on its
+     * own, and on the green side it is the confirmation that you are about to
+     * start the request from the place you think you are.
+     */
+    const place = labeller ? labeller(location) : null;
+    placeLine.textContent = place ?? "";
+    placeLine.hidden = !place;
+    statusLine.textContent = covered ? "" : blockedMessage;
+    statusLine.hidden = covered;
+    tooltip.classList.toggle("hover-tip-blocked", !covered);
+
+    if (!place && covered) {
       tooltip.hidden = true;
-    } else {
-      tooltip.textContent = blockedMessage;
-      tooltip.hidden = false;
-      // Offset from the pointer, then flipped near the right/bottom edges so
-      // the message never runs off screen on a phone.
-      const flipX = clientX > window.innerWidth - 190;
-      const flipY = clientY > window.innerHeight - 70;
-      tooltip.style.left = `${clientX + (flipX ? -14 : 14)}px`;
-      tooltip.style.top = `${clientY + (flipY ? -14 : 18)}px`;
-      tooltip.style.transform = `translate(${flipX ? "-100%" : "0"}, ${flipY ? "-100%" : "0"})`;
+      return;
     }
+
+    tooltip.hidden = false;
+    // Offset from the pointer, then flipped near the right/bottom edges so the
+    // message never runs off screen on a phone.
+    const flipX = clientX > window.innerWidth - 220;
+    const flipY = clientY > window.innerHeight - 90;
+    tooltip.style.left = `${clientX + (flipX ? -14 : 14)}px`;
+    tooltip.style.top = `${clientY + (flipY ? -14 : 18)}px`;
+    tooltip.style.transform = `translate(${flipX ? "-100%" : "0"}, ${flipY ? "-100%" : "0"})`;
   }
 
   function update(dtMs: number): void {
@@ -175,6 +202,7 @@ export function createHoverCursor(globe: GlobeScene, host: HTMLElement): HoverCu
     group,
     setEnabled,
     setPredicate,
+    setLabeller,
     setBlockedMessage,
     track,
     clear,

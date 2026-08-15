@@ -47,4 +47,10 @@ export const PALETTE = {
   satellite: 0x9fc4ff,
   satelliteActive: 0x8affc1,
   groundStation: 0xc08bff,
+  /**
+   * Cell towers. Their own hue rather than a reuse: at 91k markers this layer
+   * is dense enough that sharing a colour with anything else would make both
+   * unreadable, and it has to stay separable from the warm route nodes too.
+   */
+  cellTower: 0xff8a5c,
 } as const;

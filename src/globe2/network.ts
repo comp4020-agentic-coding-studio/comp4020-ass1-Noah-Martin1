@@ -30,7 +30,15 @@ const enum Glyph {
 const MARKER_VERTEX = /* glsl */ `
   uniform float uPixelRatio;
   uniform float uSize;
+  varying float vFacing;
+
   void main() {
+    vec4 world = modelMatrix * vec4(position, 1.0);
+    // Markers sit just above a sphere centred on the origin, and additive
+    // blending ignores the depth buffer, so the far hemisphere would otherwise
+    // shine straight through the planet. Facing < 0 means the globe is between
+    // this marker and the eye.
+    vFacing = dot(normalize(world.xyz), normalize(cameraPosition - world.xyz));
     vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
     gl_PointSize = clamp(uSize * uPixelRatio * (3.0 / max(0.001, -mvPosition.z)), 2.0, 16.0);
     gl_Position = projectionMatrix * mvPosition;
@@ -42,8 +50,11 @@ const MARKER_FRAGMENT = /* glsl */ `
   uniform vec3 uColour;
   uniform float uOpacity;
   uniform int uGlyph;
+  varying float vFacing;
 
   void main() {
+    if (vFacing < 0.0) discard;
+
     vec2 p = gl_PointCoord - 0.5;
     float alpha = 0.0;
 
@@ -113,6 +124,8 @@ export interface NetworkLayer {
   setCables(segments: readonly (readonly [number, number][])[]): void;
   /** Swaps the modelled ground stations for real Starlink gateway sites. */
   setGateways(points: readonly (readonly [number, number])[]): void;
+  /** Adds the real cell tower field, drawn under the "5G towers" toggle. */
+  setTowers(points: readonly (readonly [number, number, number])[]): void;
   setPixelRatio(ratio: number): void;
 }
 
@@ -217,6 +230,56 @@ export function createNetworkLayer(): NetworkLayer {
     schematicCables.visible = false;
   }
 
+  /*
+   * 91k towers as a single Points cloud: one draw call, one buffer, a handful
+   * of flops each. The measured cost on this scene is fill-rate, not object
+   * count (see CLAUDE.md), and these are 2 px dots -- the constellation showed
+   * 10.7k satellites are effectively free, and this behaves the same way.
+   *
+   * They stay dim until the toggle is switched on. At this density a bright
+   * default would draw a second coastline over the real one.
+   */
+  let towerField: THREE.Points | null = null;
+  let towerMaterial: THREE.ShaderMaterial | null = null;
+
+  function setTowers(points: readonly (readonly [number, number, number])[]): void {
+    if (towerField) {
+      group.remove(towerField);
+      towerField.geometry.dispose();
+    }
+
+    const positions = new Float32Array(points.length * 3);
+    const vector = new THREE.Vector3();
+    for (let i = 0; i < points.length; i++) {
+      latLonToVector3({ lat: points[i][1], lon: points[i][0] }, SURFACE, vector);
+      positions[i * 3] = vector.x;
+      positions[i * 3 + 1] = vector.y;
+      positions[i * 3 + 2] = vector.z;
+    }
+
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
+
+    towerMaterial = new THREE.ShaderMaterial({
+      uniforms: {
+        uColour: { value: new THREE.Color(PALETTE.cellTower) },
+        uPixelRatio: { value: pixelRatio },
+        uOpacity: { value: 0.3 },
+        uSize: { value: 2.6 },
+        uGlyph: { value: Glyph.Dot },
+      },
+      vertexShader: MARKER_VERTEX,
+      fragmentShader: MARKER_FRAGMENT,
+      transparent: true,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+    });
+
+    towerField = new THREE.Points(geometry, towerMaterial);
+    group.add(towerField);
+    setLayers(layerState);
+  }
+
   function setGateways(gateways: readonly (readonly [number, number])[]): void {
     group.remove(groundStations.points);
     groundStations.points.geometry.dispose();
@@ -240,6 +303,9 @@ export function createNetworkLayer(): NetworkLayer {
     // as a mesh that swallows the coastlines underneath it.
     realCableMaterial.opacity = layers.fibre ? 0.55 : 0.14;
     towers.material.uniforms.uOpacity.value = layers.towers ? 0.95 : 0.22;
+    // Much lower than the other layers at both ends: 91k additive dots reach
+    // the same visual weight as a few dozen markers at a fraction of the alpha.
+    if (towerMaterial) towerMaterial.uniforms.uOpacity.value = layers.towers ? 0.5 : 0.1;
     groundStations.material.uniforms.uOpacity.value = layers.groundStations ? 0.95 : 0.22;
     servers.material.uniforms.uOpacity.value = layers.servers ? 0.95 : 0.3;
   }
@@ -249,7 +315,8 @@ export function createNetworkLayer(): NetworkLayer {
     for (const markers of [towers, groundStations, servers]) {
       markers.material.uniforms.uPixelRatio.value = ratio;
     }
+    if (towerMaterial) towerMaterial.uniforms.uPixelRatio.value = ratio;
   }
 
-  return { group, setLayers, setCables, setGateways, setPixelRatio };
+  return { group, setLayers, setCables, setGateways, setTowers, setPixelRatio };
 }

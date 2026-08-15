@@ -199,13 +199,32 @@ canvas:focus-visible {
   position: fixed;
   z-index: 5;
   pointer-events: none;
-  background: rgb(24 6 10 / 92%);
-  border: 1px solid rgb(255 90 106 / 55%);
-  color: #ffd9de;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  max-width: 15rem;
+  background: rgb(6 10 20 / 92%);
+  border: 1px solid rgb(84 255 143 / 45%);
+  color: var(--ink);
   border-radius: 8px;
   padding: 5px 9px;
   font-size: 0.74rem;
-  white-space: nowrap;
+}
+
+.hover-tip-place {
+  font-weight: 600;
+}
+
+/* Refused: the border and the message carry it, but the wording says so too --
+   colour alone is never the signal (CLAUDE.md, accessibility). */
+.hover-tip-blocked {
+  background: rgb(24 6 10 / 92%);
+  border-color: rgb(255 90 106 / 55%);
+}
+
+.hover-tip-status {
+  color: #ffd9de;
+  font-size: 0.7rem;
 }
 
 .data-note {
