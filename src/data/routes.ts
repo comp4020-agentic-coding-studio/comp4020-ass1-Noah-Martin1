@@ -1,5 +1,6 @@
 import { haversineKm, midpointLatLon } from "../globe/geometry";
 import { CITIES, CITY_BY_ID, GROUND_STATIONS, HUB_EDGES } from "./geo";
+import { annotateLatency } from "./latency";
 import type {
   City,
   HubEdge,
@@ -103,9 +104,11 @@ function nearestGroundStation(at: LatLon) {
 }
 
 let stepCounter = 0;
-function step(partial: Omit<RouteStep, "id">): RouteStep {
+function step(partial: Omit<RouteStep, "id" | "latencyMs" | "elapsedMs">): RouteStep {
   stepCounter += 1;
-  return { ...partial, id: `step-${stepCounter}` };
+  // Latency is filled in by annotateLatency once the whole chain exists — a
+  // leg's delay depends on the step before it, which no single step knows.
+  return { ...partial, id: `step-${stepCounter}`, latencyMs: 0, elapsedMs: 0 };
 }
 
 function deviceStep(origin: RouteOrigin): RouteStep {
@@ -277,7 +280,14 @@ export function buildTerrestrialRoute(
 
   steps.push(serverStep(destination));
 
-  return { steps, usesStarlink: false, crossesOcean: edges.some((e) => e.kind === "submarine"), backboneEdges: edges };
+  const totalLatencyMs = annotateLatency(steps);
+  return {
+    steps,
+    usesStarlink: false,
+    crossesOcean: edges.some((e) => e.kind === "submarine"),
+    backboneEdges: edges,
+    totalLatencyMs,
+  };
 }
 
 export function buildStarlinkRoute(origin: RouteOrigin, destination: RouteDestination): Route {
@@ -293,7 +303,14 @@ export function buildStarlinkRoute(origin: RouteOrigin, destination: RouteDestin
   withHubPath(steps, hubIds, edges);
   steps.push(serverStep(destination));
 
-  return { steps, usesStarlink: true, crossesOcean: edges.some((e) => e.kind === "submarine"), backboneEdges: edges };
+  const totalLatencyMs = annotateLatency(steps);
+  return {
+    steps,
+    usesStarlink: true,
+    crossesOcean: edges.some((e) => e.kind === "submarine"),
+    backboneEdges: edges,
+    totalLatencyMs,
+  };
 }
 
 export function buildRoute(

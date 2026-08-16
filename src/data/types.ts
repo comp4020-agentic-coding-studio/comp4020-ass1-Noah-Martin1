@@ -82,6 +82,14 @@ export interface RouteStep {
   explanation: string;
   fact: string;
   visual: VisualBehaviour;
+  /**
+   * Approximate one-way delay for the leg arriving at this step, in whole ms.
+   * An estimate from distance and typical equipment behaviour — see
+   * ./latency.ts. Zero on the first step, which is where the request begins.
+   */
+  latencyMs: number;
+  /** Approximate cumulative one-way delay from the device to here, in ms. */
+  elapsedMs: number;
 }
 
 export interface Route {
@@ -90,4 +98,6 @@ export interface Route {
   crossesOcean: boolean;
   /** Backbone edges this route travels along, for highlighting the matching fibre arcs. */
   backboneEdges: HubEdge[];
+  /** Approximate one-way total delay, in ms. Doubling it approximates a ping. */
+  totalLatencyMs: number;
 }

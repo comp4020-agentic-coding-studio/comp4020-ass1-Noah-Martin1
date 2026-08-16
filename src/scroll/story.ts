@@ -100,7 +100,26 @@ export function createStoryPanel(): StoryPanel {
       fact.className = "stage-fact";
       fact.innerHTML = `<strong>Know this:</strong> ${step.fact}`;
 
-      section.append(eyebrow, title, explanation, fact);
+      /*
+       * The timing line. Estimates, so they are labelled as estimates
+       * everywhere they appear — see data/latency.ts. The last stage carries
+       * the total and the round trip, because the round trip is the number a
+       * reader will recognise: it is what ping reports.
+       */
+      const timing = document.createElement("p");
+      timing.className = "stage-timing";
+      const last = index === route.steps.length - 1;
+      if (index === 0) {
+        timing.textContent = "The clock starts here.";
+      } else if (last) {
+        timing.innerHTML =
+          `<strong>+${step.latencyMs} ms</strong> · about <strong>${step.elapsedMs} ms</strong> one way, ` +
+          `so roughly <strong>${step.elapsedMs * 2} ms</strong> there and back — that round trip is what a ping measures.`;
+      } else {
+        timing.innerHTML = `<strong>+${step.latencyMs} ms</strong> · about ${step.elapsedMs} ms so far`;
+      }
+
+      section.append(eyebrow, title, explanation, fact, timing);
       section.addEventListener("click", () => {
         section.scrollIntoView({ behavior: "smooth", block: "center" });
       });
