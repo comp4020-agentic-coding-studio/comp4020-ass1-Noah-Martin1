@@ -26,6 +26,7 @@ import { createRouteLayer } from "./globe2/route";
 import { createGlobeScene } from "./globe2/scene";
 import { createSky } from "./globe2/sky";
 import { createStarlinkField, type StarlinkField } from "./globe2/starlink-field";
+import { reducedMotion } from "./reduced-motion";
 import { createStoryPanel } from "./scroll/story";
 import { setDestination, setOrigin, setTowerLookup, state, subscribe } from "./state";
 import { createControlPanel } from "./ui/panel";
@@ -47,6 +48,13 @@ const panelHost = required("control-panel-host", HTMLElement);
 const storyHost = required("story-host", HTMLElement);
 const dataNote = required("data-note", HTMLElement);
 const promptHost = required("prompt-host", HTMLElement);
+const heroCta = required("hero-cta", HTMLButtonElement);
+
+// The hero is the only element in normal document flow -- scrolling past its
+// one-viewport height is what reveals the already-rendered fixed globe below.
+heroCta.addEventListener("click", () => {
+  window.scrollTo({ top: window.innerHeight, behavior: reducedMotion.value ? "auto" : "smooth" });
+});
 
 const panel = createControlPanel();
 panelHost.append(panel.el);
