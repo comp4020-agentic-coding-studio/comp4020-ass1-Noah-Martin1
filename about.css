@@ -10,15 +10,18 @@
      document page has to scroll. */
   overflow: visible;
   background:
-    radial-gradient(ellipse 80% 55% at 18% -10%, rgb(76 155 255 / 14%), transparent 70%),
-    radial-gradient(ellipse 60% 45% at 90% 8%, rgb(192 139 255 / 10%), transparent 70%),
+    radial-gradient(ellipse 90% 50% at 30% -12%, rgb(76 155 255 / 13%), transparent 68%),
+    radial-gradient(ellipse 55% 40% at 92% 4%, rgb(192 139 255 / 9%), transparent 70%),
     var(--bg);
   min-height: 100%;
 }
 
 .about-shell {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
+
+  /* A fixed rail rather than `auto`: the content column's width should not
+     shift with the length of a nav label. */
+  grid-template-columns: 232px minmax(0, 1fr);
   min-height: 100dvh;
 }
 
@@ -37,85 +40,176 @@
   top: 0;
 }
 
+/*
+ * Centred in the space beside the rail, not hugging it. Left-aligning a
+ * ~74ch column against the rail is what made this read as a second sidebar
+ * with a screen of dead space next to it: on a 1920px display the content
+ * has to be centred in its own column and allowed to use the width.
+ */
 .about-main {
-  max-width: 74ch;
-  padding: clamp(28px, 5vw, 72px) clamp(20px, 5vw, 64px) 96px;
+  width: 100%;
+  max-width: 1080px;
+  margin-inline: auto;
+  padding: clamp(48px, 6vw, 104px) clamp(24px, 4vw, 64px) clamp(80px, 8vw, 132px);
 }
+
+/* --- hero --- */
 
 .about-eyebrow {
   font-family: var(--font-display);
-  font-size: 0.7rem;
-  letter-spacing: 0.14em;
+  font-size: 0.72rem;
+  letter-spacing: 0.16em;
   text-transform: uppercase;
   color: var(--blue);
-  margin: 0 0 12px;
-}
-
-.about-header h1 {
-  font-size: clamp(1.7rem, 4.2vw, 2.6rem);
-  line-height: 1.15;
-  letter-spacing: -0.02em;
   margin: 0 0 18px;
 }
 
+.about-hero h1 {
+  font-size: clamp(2rem, 4.4vw, 3.4rem);
+  line-height: 1.08;
+  letter-spacing: -0.03em;
+  margin: 0 0 24px;
+  max-width: 18ch;
+}
+
 .about-lede {
-  font-size: clamp(1rem, 1.6vw, 1.14rem);
-  line-height: 1.65;
-  color: var(--ink);
+  font-size: clamp(1.02rem, 1.35vw, 1.22rem);
+  line-height: 1.62;
+  color: rgb(233 237 246 / 88%);
   margin: 0;
-  max-width: 62ch;
+
+  /* Prose stays at a readable measure even though its container is wider. */
+  max-width: 60ch;
 }
 
-.about-header {
-  padding-bottom: 34px;
-  border-bottom: 1px solid var(--hair);
-  margin-bottom: 8px;
+.about-highlights {
+  list-style: none;
+  margin: clamp(40px, 5vw, 64px) 0 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
 }
 
-.about-section {
-  padding-top: 38px;
+.highlight {
+  background: rgb(255 255 255 / 3%);
+  border: 1px solid var(--hair);
+  border-top: 1px solid var(--blue-line);
+  border-radius: 14px;
+  padding: 20px 20px 22px;
 }
 
-.about-section h2 {
-  font-size: 1.18rem;
-  letter-spacing: -0.01em;
-  margin: 0 0 14px;
-  padding-left: 14px;
-  border-left: 2px solid var(--blue);
+.highlight h2 {
+  font-family: var(--font-display);
+  font-size: 0.7rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--blue);
+  margin: 0 0 10px;
 }
 
-.about-section p {
-  font-size: 0.95rem;
-  line-height: 1.72;
-  color: rgb(233 237 246 / 82%);
-  margin: 0 0 14px;
+.highlight p {
+  font-size: 0.88rem;
+  line-height: 1.6;
+  color: rgb(233 237 246 / 76%);
+  margin: 0;
 }
 
-.about-list {
+/* --- card grids for the datasets and the limitations --- */
+
+.about-grid {
   list-style: none;
   margin: 0;
   padding: 0;
   display: grid;
-  gap: 10px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
 }
 
-.about-list li {
-  font-size: 0.92rem;
-  line-height: 1.65;
-  color: rgb(233 237 246 / 78%);
+.about-grid li {
   background: rgb(76 155 255 / 4%);
   border: 1px solid var(--blue-line);
-  border-radius: 12px;
-  padding: 12px 16px;
+  border-radius: 14px;
+  padding: 18px 20px;
 }
 
-.about-list strong {
+.about-grid h3 {
+  font-size: 0.92rem;
+  letter-spacing: -0.01em;
+  margin: 0 0 8px;
   color: var(--ink);
-  font-weight: 600;
 }
+
+.about-grid p {
+  font-size: 0.87rem;
+  line-height: 1.62;
+  color: rgb(233 237 246 / 74%);
+  margin: 0;
+}
+
+.about-grid code {
+  font-family: var(--font-display);
+  font-size: 0.82em;
+  color: var(--blue);
+}
+
+/* --- sections: heading rail on the left, content on the right --- */
+
+.about-section {
+  display: grid;
+  grid-template-columns: minmax(0, 250px) minmax(0, 1fr);
+  gap: 24px 48px;
+  padding-top: clamp(48px, 6vw, 84px);
+  margin-top: clamp(48px, 6vw, 84px);
+  border-top: 1px solid var(--hair);
+}
+
+.section-head h2 {
+  font-size: clamp(1.22rem, 1.9vw, 1.6rem);
+  line-height: 1.2;
+  letter-spacing: -0.02em;
+  margin: 0;
+
+  /* Stays beside its content while a long section scrolls past. */
+  position: sticky;
+  top: 32px;
+}
+
+.section-note {
+  font-size: 0.85rem;
+  line-height: 1.55;
+  color: var(--muted);
+  margin: 12px 0 0;
+}
+
+.section-body p {
+  font-size: 0.97rem;
+  line-height: 1.75;
+  color: rgb(233 237 246 / 82%);
+  margin: 0 0 16px;
+  max-width: 66ch;
+}
+
+.section-body p:last-child {
+  margin-bottom: 0;
+}
+
+/* --- closing call to action --- */
 
 .about-return {
-  margin: 46px 0 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 20px;
+  margin-top: clamp(48px, 6vw, 84px);
+  padding-top: clamp(36px, 4vw, 56px);
+  border-top: 1px solid var(--hair);
+}
+
+.about-return-text {
+  font-size: 1.05rem;
+  color: var(--ink);
+  margin: 0;
 }
 
 .about-cta {
@@ -127,7 +221,7 @@
   background: rgb(84 255 143 / 5%);
   border: 1px solid rgb(84 255 143 / 40%);
   border-radius: 999px;
-  padding: 11px 22px;
+  padding: 12px 24px;
   transition:
     border-color 0.2s ease,
     box-shadow 0.2s ease,
@@ -142,9 +236,29 @@
   box-shadow: 0 0 18px rgb(84 255 143 / 32%);
 }
 
+/* Laptop widths: the section heading rail costs more than it returns once the
+   content column drops under about 560px, so stack it. */
+@media (width <= 1180px) {
+  .about-section {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 18px;
+  }
+
+  .section-head h2 {
+    position: static;
+  }
+}
+
+@media (width <= 900px) {
+  .about-highlights,
+  .about-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
 @media (width <= 860px) {
-  /* The rail becomes a bar across the top: a 56px column would take a seventh
-     of a 390px screen and leave the text squeezed beside it. */
+  /* The rail becomes a bar across the top: a fixed column would take a large
+     share of a 390px screen and leave the text squeezed beside it. */
   .about-shell {
     grid-template-columns: minmax(0, 1fr);
   }
@@ -163,6 +277,10 @@
   .about-rail .rail-link {
     flex: 1 1 auto;
     justify-content: center;
+  }
+
+  .about-hero h1 {
+    max-width: none;
   }
 }
 
