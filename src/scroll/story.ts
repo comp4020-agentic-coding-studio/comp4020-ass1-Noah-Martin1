@@ -29,12 +29,10 @@ export function createStoryPanel(): StoryPanel {
   list.className = "story-stages";
   el.append(list);
 
-  let observer: IntersectionObserver | null = null;
   let lastRoute: Route | null = null;
 
   function buildStages(route: Route): void {
     list.innerHTML = "";
-    observer?.disconnect();
 
     route.steps.forEach((step, index) => {
       const section = document.createElement("section");
@@ -71,38 +69,58 @@ export function createStoryPanel(): StoryPanel {
     // into the old route would open mid-way into the new one — stage 2 visible
     // before stage 1 has ever been seen. Every fresh route starts at the top.
     el.scrollTop = 0;
-
-    observer = new IntersectionObserver(
-      (entries) => {
-        // At the bottom several stages are fully visible at once, so whichever
-        // wins on ratio is arbitrary. Being at the end is unambiguous, and it
-        // has to win, or the journey never formally completes.
-        if (atBottom()) {
-          setStageIndex(route.steps.length);
-          return;
-        }
-        let best: { index: number; ratio: number } | null = null;
-        for (const entry of entries) {
-          if (!entry.isIntersecting) continue;
-          const index = Number((entry.target as HTMLElement).dataset.index);
-          if (!best || entry.intersectionRatio > best.ratio) best = { index, ratio: entry.intersectionRatio };
-        }
-        if (best) setStageIndex(best.index + 1);
-      },
-      { root: el, threshold: [0.25, 0.5, 0.75], rootMargin: "-10% 0px -10% 0px" },
-    );
-    for (const section of list.children) observer.observe(section);
+    updateActiveStage();
   }
 
   function atBottom(): boolean {
     return el.scrollTop + el.clientHeight >= el.scrollHeight - 12;
   }
 
-  // The observer only fires when an intersection actually changes, which a
-  // final few pixels of scrolling may not do -- so watch the scroll too.
-  el.addEventListener("scroll", () => {
-    if (lastRoute && atBottom()) setStageIndex(lastRoute.steps.length);
-  });
+  /**
+   * Picks the stage nearest the vertical centre of the panel and reports it.
+   *
+   * This used to be an IntersectionObserver comparing intersection ratios
+   * across whichever entries happened to cross a threshold in a given batch.
+   * On a fast scroll (including the globe-forwarded wheel deltas, which can
+   * arrive in large steps) several stages cross their thresholds within the
+   * same callback, and the entry with the largest ratio is not necessarily
+   * the one the scroll passed through first — so the reported stage could
+   * jump backward (2, then 1, then 3) instead of advancing in order. Reading
+   * geometry directly off `scrollTop` instead is a plain lookup: stages are
+   * stacked top-to-bottom, so "nearest to the centre" only ever moves
+   * monotonically as the user scrolls, regardless of how far a single event
+   * jumps.
+   */
+  function updateActiveStage(): void {
+    if (!lastRoute) return;
+    // At the bottom several stages can be nearest-to-centre at once (the last
+    // one's gap runs off the end of the scrollable area), so being at the end
+    // is treated as unambiguous — it has to win, or the journey never
+    // formally completes.
+    if (atBottom()) {
+      setStageIndex(lastRoute.steps.length);
+      return;
+    }
+    const target = el.scrollTop + el.clientHeight / 2;
+    let bestIndex = 0;
+    let bestDistance = Infinity;
+    for (const child of list.children) {
+      const section = child as HTMLElement;
+      const center = section.offsetTop + section.offsetHeight / 2;
+      const distance = Math.abs(center - target);
+      if (distance < bestDistance) {
+        bestDistance = distance;
+        bestIndex = Number(section.dataset.index);
+      }
+    }
+    setStageIndex(bestIndex + 1);
+  }
+
+  el.addEventListener("scroll", updateActiveStage);
+  // A resize (rotating a phone, DevTools docking) moves every section's
+  // offset without firing a scroll event, so the active stage would otherwise
+  // go stale until the next scroll.
+  window.addEventListener("resize", updateActiveStage);
 
   subscribe((s) => {
     if (s.route !== lastRoute) {
