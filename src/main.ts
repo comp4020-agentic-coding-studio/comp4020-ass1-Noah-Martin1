@@ -398,6 +398,10 @@ subscribe((s) => {
     route.setRoute(s.route);
     radio.showAt(null);
     resetReply();
+    // playBeat slows the constellation to real time while a space leg is on
+    // screen; nothing else ever speeds it back up, so a cleared/replaced
+    // route (including "New request") has to undo that itself.
+    starlink?.setTimeScale(1);
   }
 
   route.setStage(s.stageIndex);
@@ -430,8 +434,10 @@ subscribe((s) => {
     if (phase === "journey" && nextPhase !== "journey") releaseShot();
     applyPhase(nextPhase);
     // Choosing an origin is what collapses the constellation to the satellites
-    // that can actually serve it.
-    if (nextPhase !== "choose-origin") starlink?.setIsolated(s.starlinkOn);
+    // that can actually serve it; going back to choose-origin (e.g. "New
+    // request") has to explicitly un-collapse it, or the old origin's subset
+    // stays isolated forever since nothing else ever turns it off.
+    starlink?.setIsolated(nextPhase !== "choose-origin" && s.starlinkOn);
     if (nextPhase === "journey") releaseShot();
   }
 
