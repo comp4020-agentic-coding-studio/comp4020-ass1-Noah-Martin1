@@ -921,3 +921,38 @@ canvas:focus-visible {
     padding-bottom: 20vh;
   }
 }
+
+/*
+ * Short viewports -- a landscape phone, or a small device with the browser
+ * chrome showing. Four stacked bands do not fit in ~400px of height: the
+ * globe and the control band between them leave the story sheet with a
+ * couple of lines. So the globe gives some height back, the control band is
+ * capped tighter, and the explanation stays readable. Collapsing the sidebar
+ * is still the bigger win here, and the pill makes that one tap.
+ */
+@media (width <= 860px) and (height <= 560px) {
+  .ui {
+    grid-template-rows: auto minmax(0, 40dvh) auto minmax(0, 1fr);
+  }
+
+  #control-host {
+    max-height: 30dvh;
+  }
+
+  .ui:has(#control-host.is-collapsed) {
+    grid-template-rows: auto minmax(0, 56dvh) 0 minmax(0, 1fr);
+  }
+
+  body[data-phase="journey"] .ui:has(#control-host.is-collapsed) {
+    grid-template-rows: auto minmax(0, 46dvh) 0 minmax(0, 1fr);
+  }
+
+  .site-header {
+    padding: 6px 14px;
+  }
+
+  .story-stages {
+    gap: 7vh;
+    padding-bottom: 16vh;
+  }
+}
