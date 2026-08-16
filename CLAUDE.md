@@ -283,6 +283,8 @@ The overall visual language should be:
 
 The design should feel like an interactive network map rather than a conventional corporate website.
 
+The site loads into a landing hero (title, one-line subtitle, "Scroll to begin"), not straight into the globe — scrolling it away reveals the already-rendered globe underneath. On the globe itself, an unmissable prompt next to it — not the origin/destination dropdowns — is the primary way a first-time user is invited to act ("Choose where to send from", "Now pick the destination data centre", "Scroll to follow the request."); the dropdowns are kept only as a keyboard/screen-reader fallback behind a disclosure. See "Landing hero and prompt-primary selection" under Implementation Decisions for how this is built.
+
 ## Globe
 
 The globe is the primary visual element.
@@ -799,6 +801,22 @@ The `#data-note` element states the satellite count, the snapshot date, that the
 Measured, not assumed: drawing all ~10,700 satellites costs roughly nothing (one draw call, a few flops each), while frame rate tracks pixel count. The expensive thing is the bloom pass.
 
 So the scene times itself and steps quality down (`notifyFrame` in `src/globe2/scene.ts`); `?quality=high` or `?quality=low` pins a tier, which is how to take reproducible screenshots on a machine whose GPU differs from the viewer's. Before optimising anything here, measure which of the two it is — headless Chromium runs on SwiftShader and is not representative of real hardware.
+
+## Landing hero and prompt-primary selection
+
+The page loads into `<section class="hero">` — the only element in normal document flow. `#globe-canvas` and `.ui` are both `position: fixed` and are already full-screen underneath it from first paint, so `body` just needs to be taller than one viewport (`min-height: 200dvh`, with `.hero` itself at `100dvh`) for scrolling to carry the hero away and "reveal" the globe. Nothing is loaded or animated in at that point — don't add a fade/mount step here, the illusion depends on the globe already running.
+
+Do not remove that `min-height: 200dvh`. Without it the document is exactly one viewport tall (the hero's own height), which means zero scrollable range — scrolling, and the "Scroll to begin" button's `scrollTo`, would silently do nothing. This is the kind of bug that is invisible from reading `.hero`'s own CSS and only shows up by checking the actual scroll range.
+
+The on-globe prompt (`#prompt-host`, `src/ui/prompt.ts`) is the primary selection mechanic; the origin/destination `<select>` elements in `src/ui/panel.ts` are kept only for keyboard/screen-reader users and sit behind a collapsed `<details>` disclosure. Don't remove the selects outright — that would regress the Accessibility section above — and don't promote them back above the prompt.
+
+Ground stations moved out of the infrastructure-layer pills and into a `<fieldset class="mode-box">` alongside the Starlink switch, because the two toggles are conceptually related (ground stations only matter once Starlink is on) even though they stay independent switches. If a new mode-specific toggle is added later, it belongs in `mode-box`, not the layer pills.
+
+## The globe is a second scrollbar for the journey, once one is playing
+
+`orbit-controls.ts`'s existing suspend/resume mechanism (camera director owns the camera during a scripted shot; grabbing the globe hands it back via `onUserTakeControl`) already covered "click the globe to drop into free orbit" and "click a sidebar step to resume the scripted shot." The only missing piece was scroll: `onWheel` now checks `isSuspended()` and, if true, forwards `deltaY` to `story.el.scrollTop` instead of zooming (`onWheelWhileSuspended` in `main.ts`) — reusing the sidebar's own `IntersectionObserver` → `setStageIndex` plumbing rather than duplicating stage-scrub logic against the wheel. This is inert outside the journey phase (never suspended there), so it changes nothing about origin/destination selection.
+
+Relatedly: `story.ts`'s `buildStages()` rebuilds the sidebar's DOM list (e.g. when Starlink is toggled) without resetting scroll position — always call `el.scrollTop = 0` there, or a route change can leave the sidebar opened mid-list.
 
 ---
 
