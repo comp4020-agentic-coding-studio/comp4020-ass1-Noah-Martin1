@@ -424,6 +424,10 @@ subscribe((s) => {
 
   const nextPhase = phaseFor(s.origin, s.destination);
   if (nextPhase !== phase) {
+    // Leaving a scripted journey (e.g. a mid-route reset) has to hand the
+    // camera back, or orbit-controls stays suspended with no shot left to
+    // resume it.
+    if (phase === "journey" && nextPhase !== "journey") releaseShot();
     applyPhase(nextPhase);
     // Choosing an origin is what collapses the constellation to the satellites
     // that can actually serve it.

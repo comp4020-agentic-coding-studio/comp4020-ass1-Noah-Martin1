@@ -107,3 +107,11 @@ export function randomizeRoute(): void {
   recomputeRoute();
   notify();
 }
+
+/** Clears the current selection so the user can start choosing a route again. */
+export function resetRoute(): void {
+  state.origin = null;
+  state.destination = null;
+  recomputeRoute();
+  notify();
+}

@@ -1,6 +1,7 @@
 import { citiesWithKind } from "../data/geo";
 import {
   randomizeRoute,
+  resetRoute,
   setDestination,
   setLayer,
   setOrigin,
@@ -144,9 +145,20 @@ export function createControlPanel(): ControlPanel {
   randomButton.textContent = "Random route";
   randomButton.addEventListener("click", () => randomizeRoute());
 
+  const resetButton = document.createElement("button");
+  resetButton.type = "button";
+  resetButton.className = "reset-button";
+  resetButton.textContent = "New request";
+  resetButton.title = "Stop and start a new request";
+  resetButton.addEventListener("click", () => resetRoute());
+
+  const buttonsRow = document.createElement("div");
+  buttonsRow.className = "panel-buttons";
+  buttonsRow.append(randomButton, resetButton);
+
   const actionsRow = document.createElement("div");
   actionsRow.className = "panel-row panel-row-actions";
-  actionsRow.append(modeBox, randomButton);
+  actionsRow.append(modeBox, buttonsRow);
 
   const layersFieldset = document.createElement("fieldset");
   layersFieldset.className = "layers";

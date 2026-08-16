@@ -30,22 +30,23 @@
         </nav>
       </header>
 
+      <aside id="control-host" aria-label="Route controls">
+        <p class="hint" id="page-hint">Drag to rotate · scroll to zoom · tap a city to select it</p>
+        <div id="control-panel-host"></div>
+        <!-- The disclaimer is always visible; the per-dataset attributions sit
+             behind a disclosure so they cannot crowd out the globe on a phone. -->
+        <p class="data-note">Routes are simplified illustrations of real infrastructure, not live traceroutes.</p>
+        <details class="data-sources">
+          <summary>Where this data comes from</summary>
+          <p id="data-note" role="status" aria-live="polite"></p>
+        </details>
+      </aside>
+
       <div class="stage-column">
         <!-- Layout anchor only: CSS decides where the globe should be centred,
              and the renderer reads this element's box each resize. -->
         <div id="globe-focus" aria-hidden="true"></div>
         <div id="prompt-host"></div>
-        <div class="stage-foot">
-          <p class="hint" id="page-hint">Drag to rotate · scroll to zoom · tap a city to select it</p>
-          <div id="control-panel-host"></div>
-          <!-- The disclaimer is always visible; the per-dataset attributions sit
-               behind a disclosure so they cannot crowd out the globe on a phone. -->
-          <p class="data-note">Routes are simplified illustrations of real infrastructure, not live traceroutes.</p>
-          <details class="data-sources">
-            <summary>Where this data comes from</summary>
-            <p id="data-note" role="status" aria-live="polite"></p>
-          </details>
-        </div>
       </div>
 
       <aside id="story-host" aria-label="Journey of the request"></aside>
