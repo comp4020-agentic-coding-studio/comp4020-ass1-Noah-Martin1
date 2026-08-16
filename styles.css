@@ -519,6 +519,17 @@ canvas:focus-visible {
   gap: 10px;
 }
 
+/* Same shape as the Starlink box, but this one is about the view, so it takes
+   the interface's blue rather than the Starlink purple. */
+.view-box {
+  background: rgb(76 155 255 / 4%);
+  border-color: var(--blue-line);
+}
+
+.view-box legend {
+  color: rgb(220 233 255 / 75%);
+}
+
 .mode-box legend {
   color: rgb(232 220 255 / 75%);
   font-family: var(--font-display);
@@ -610,6 +621,17 @@ canvas:focus-visible {
 .switch input:focus-visible + .switch-track {
   outline: 2px solid var(--focus);
   outline-offset: 2px;
+}
+
+/* The View box's switch takes the interface blue rather than the Starlink
+   purple. Sits after the base switch rules so specificity ascends. */
+.view-box .switch input:checked + .switch-track {
+  background: var(--blue);
+  box-shadow: 0 0 10px rgb(76 155 255 / 45%);
+}
+
+.view-box .switch input:checked + .switch-track::after {
+  background: #06152b;
 }
 
 .panel-buttons {
@@ -796,6 +818,24 @@ canvas:focus-visible {
 
 .stage-fact strong {
   color: var(--node);
+}
+
+/* Estimated timings. Blue rather than the route's green: this is a property of
+   the leg, not another piece of infrastructure. */
+.stage-timing {
+  margin: 10px 0 0;
+  padding-top: 8px;
+  border-top: 1px dashed var(--hair);
+  font-family: var(--font-display);
+  font-size: 0.72rem;
+  line-height: 1.5;
+  letter-spacing: 0.02em;
+  color: var(--muted);
+}
+
+.stage-timing strong {
+  color: var(--blue);
+  font-weight: 600;
 }
 
 @media (prefers-reduced-motion: reduce) {

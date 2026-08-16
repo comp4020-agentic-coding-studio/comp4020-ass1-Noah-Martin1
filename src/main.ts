@@ -426,6 +426,7 @@ subscribe((s) => {
   route.setStage(s.stageIndex);
   network.setLayers(s.layers);
 
+  controls.setIdleRotation(s.autoRotate);
   starlink?.setVisible(s.starlinkOn);
   starlink?.setOrigin(s.origin);
 

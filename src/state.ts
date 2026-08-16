@@ -14,6 +14,8 @@ export interface AppState {
   /** The data centre the request is heading for, as chosen. */
   destination: RouteDestination | null;
   starlinkOn: boolean;
+  /** Whether the camera drifts around the globe while the user is idle. */
+  autoRotate: boolean;
   route: Route | null;
   stageIndex: number;
   layers: LayerVisibility;
@@ -30,6 +32,7 @@ export const state: AppState = {
   // sees orbiting, and selection is gated on Starlink's coverage from the
   // outset. (This supersedes the earlier "Starlink off by default" default.)
   starlinkOn: true,
+  autoRotate: true,
   route: null,
   stageIndex: 0,
   layers: { fibre: false, towers: false, groundStations: false, servers: false },
@@ -86,6 +89,11 @@ export function setDestination(destination: RouteDestination): void {
 export function setStarlink(on: boolean): void {
   state.starlinkOn = on;
   recomputeRoute();
+  notify();
+}
+
+export function setAutoRotate(on: boolean): void {
+  state.autoRotate = on;
   notify();
 }
 

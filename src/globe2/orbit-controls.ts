@@ -55,6 +55,12 @@ export interface OrbitControls {
   resume(): void;
   /** Whether a scripted shot currently owns the camera. */
   isSuspended(): boolean;
+  /**
+   * Turns the idle drift on and off. Dragging, keyboard orbit and scripted
+   * camera moves are unaffected — this holds the view still, it does not take
+   * the camera away from the user.
+   */
+  setIdleRotation(on: boolean): void;
   dispose(): void;
 }
 
@@ -86,6 +92,7 @@ export function attachOrbitControls(globe: GlobeScene, options: OrbitControlsOpt
   let lastPointerY = 0;
   let lastInteractionTime = performance.now();
   let idleBlend = 0;
+  let idleRotationOn = true;
 
   let focusAzimuth: number | null = null;
   let focusPolar: number | null = null;
@@ -325,6 +332,8 @@ export function attachOrbitControls(globe: GlobeScene, options: OrbitControlsOpt
     velocityAzimuth = 0;
     velocityPolar = 0;
 
+    if (!idleRotationOn) return;
+
     if (performance.now() - lastInteractionTime > IDLE_DELAY_MS) {
       idleBlend = Math.min(1, idleBlend + dtMs / IDLE_RAMP_MS);
       azimuth -= IDLE_ROTATION_SPEED * dtMs * idleBlend;
@@ -343,5 +352,24 @@ export function attachOrbitControls(globe: GlobeScene, options: OrbitControlsOpt
 
   applyCamera();
 
-  return { update, focusOn, refit, suspend, resume, isSuspended: () => suspended, dispose };
+  /**
+   * Turns the idle drift on and off. Only the drift: dragging, keyboard orbit
+   * and scripted camera moves all keep working, because stopping the rotation
+   * is about holding a view still, not about giving up control of the camera.
+   */
+  function setIdleRotation(on: boolean): void {
+    idleRotationOn = on;
+    if (!on) idleBlend = 0;
+  }
+
+  return {
+    update,
+    focusOn,
+    refit,
+    suspend,
+    resume,
+    isSuspended: () => suspended,
+    setIdleRotation,
+    dispose,
+  };
 }

@@ -2,6 +2,7 @@ import { citiesWithKind } from "../data/geo";
 import {
   randomizeRoute,
   resetRoute,
+  setAutoRotate,
   setDestination,
   setLayer,
   setOrigin,
@@ -160,6 +161,18 @@ export function createControlPanel(): ControlPanel {
   actionsRow.className = "panel-row panel-row-actions";
   actionsRow.append(modeBox, buttonsRow);
 
+  /*
+   * Not in the mode box: that box is the Starlink grouping, and holding the
+   * globe still has nothing to do with which network the route uses. It is a
+   * property of the view, so it gets its own small box in the same shape.
+   */
+  const { wrap: rotateWrap, input: rotateInput } = buildSwitch("rotate-toggle", "Rotate globe", setAutoRotate);
+  const viewBox = document.createElement("fieldset");
+  viewBox.className = "mode-box view-box";
+  const viewLegend = document.createElement("legend");
+  viewLegend.textContent = "View";
+  viewBox.append(viewLegend, rotateWrap);
+
   const layersFieldset = document.createElement("fieldset");
   layersFieldset.className = "layers";
   const legend = document.createElement("legend");
@@ -191,7 +204,7 @@ export function createControlPanel(): ControlPanel {
   feedback.setAttribute("role", "status");
   feedback.setAttribute("aria-live", "polite");
 
-  el.append(picker, actionsRow, layersFieldset, feedback);
+  el.append(picker, actionsRow, viewBox, layersFieldset, feedback);
 
   function setFeedback(message: string | null): void {
     feedback.textContent = message ?? "";
@@ -206,6 +219,7 @@ export function createControlPanel(): ControlPanel {
     const destValue = s.destination?.cityId ?? "";
     if (destSelect.value !== destValue) destSelect.value = destValue;
     starlinkInput.checked = s.starlinkOn;
+    rotateInput.checked = s.autoRotate;
     groundInput.checked = s.layers.groundStations;
     for (const key of Object.keys(LAYER_LABELS) as Exclude<keyof LayerVisibility, "groundStations">[]) {
       const input = layerInputs[key];
