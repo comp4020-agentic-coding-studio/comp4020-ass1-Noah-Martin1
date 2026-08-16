@@ -770,6 +770,14 @@ Two things about that file will bite anyone who touches the script:
 - **Its strips are not in row order.** Row 0 begins 629 MB into a 933 MB file and 284 rows are stored back near the front. Read `StripOffsets`; assuming the pixels are one contiguous block after the header silently puts London, Paris and Sydney on empty ocean.
 - **The selection is stratified, not top-N.** One marker per 0.25° block that has any tower at all. Ranking globally by density keeps city centres and deletes the countryside — which is the exact case the 5G story exists to explain.
 
+### Submarine cables: branches join mid-span, not just end-to-end
+
+`src/data/cable-paths.ts` walks a system's branches to draw a submarine leg along the cable that really carries it. Every TeleGeography feature is a MultiLineString whose branches must be chained, and **the join is usually not at a branch's endpoint** — a country drop or a trunk continuation T's off the middle of another run.
+
+Chaining end-to-end only (the first implementation) rejected whole systems that plainly connected both hubs, and `between()` then returned null and the leg silently fell back to a great circle. Cape Town → London drew a straight line across the African continent; Los Angeles → Panama and Marseille → Dubai failed the same way. So junctions are built by matching each branch *end* against the nearest *vertex* of every other branch, and the walk is a Dijkstra over those junction "ports".
+
+`spec/cable-paths.test.ts` asserts every submarine `HUB_EDGE` resolves to a real path. **A null from `between()` is invisible in the UI** — it just quietly draws an arc — so that test is the only thing standing between a regression and a line through the middle of a continent. Keep it passing rather than relaxing it.
+
 ### Data centres: OpenStreetMap, and why not PeeringDB
 
 `scripts/fetch-datacentres.ts` reads OSM's `telecom=data_center` via Overpass (ODbL, 4,469 sites).

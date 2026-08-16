@@ -83,126 +83,199 @@ function nearestVertex(branches: readonly (readonly Point[])[], to: LatLon): Nea
 }
 
 /**
- * Walks one system's branches from `from` to `to`, hopping between branches
- * wherever their ends meet.
+ * Where one branch of a system meets another.
  *
- * Dijkstra over (branch, end-we-leave-by): entering a branch at one end and
- * leaving by the other means traversing all of it, so the state space is two
- * per branch and a system only has a handful of branches.
+ * Crucially the meeting point on the far branch is *any* vertex, not just an
+ * end. Branches were originally chained end-to-end only, which quietly threw
+ * away most of the network: a country drop or a trunk continuation usually
+ * T's off the middle of another branch, not its tip. Curie is the clearest
+ * case -- two branches, one landing near Los Angeles and one near Panama,
+ * joined mid-span -- and end-only matching rejected the whole system, so the
+ * leg fell back to a great circle straight across Central America. Cape Town
+ * to London failed the same way on 2Africa's 38 branches.
  */
-function pathThroughSystem(branches: readonly (readonly Point[])[], from: Nearest, to: Nearest): Point[] | null {
-  if (from.line === to.line) {
-    const points = branches[from.line];
-    const lo = Math.min(from.vertex, to.vertex);
-    const hi = Math.max(from.vertex, to.vertex);
-    const slice = points.slice(lo, hi + 1);
-    return from.vertex <= to.vertex ? slice : slice.slice().reverse();
-  }
+interface Junction {
+  aLine: number;
+  aVertex: number;
+  bLine: number;
+  bVertex: number;
+  km: number;
+}
 
-  const endPoint = (line: number, end: 0 | 1): Point => {
-    const points = branches[line];
-    return end === 0 ? points[0] : points[points.length - 1];
-  };
-
-  interface State {
-    line: number;
-    exit: 0 | 1;
-  }
-  const key = (state: State): string => `${state.line}:${state.exit}`;
-
-  const cost = new Map<string, number>();
-  const previous = new Map<string, State | null>();
-  const queue: State[] = [];
-
-  for (const exit of [0, 1] as const) {
-    // Leaving the first branch means walking from the entry vertex to that end.
-    const points = branches[from.line];
-    const walk =
-      exit === 0
-        ? pathLengthKm(points.slice(0, from.vertex + 1))
-        : pathLengthKm(points.slice(from.vertex));
-    const state: State = { line: from.line, exit };
-    cost.set(key(state), walk);
-    previous.set(key(state), null);
-    queue.push(state);
-  }
-
-  let best: { state: State; total: number } | null = null;
-
-  while (queue.length > 0) {
-    queue.sort((x, y) => (cost.get(key(x)) ?? Infinity) - (cost.get(key(y)) ?? Infinity));
-    const current = queue.shift()!;
-    const currentCost = cost.get(key(current)) ?? Infinity;
-    if (best && currentCost >= best.total) break;
-
-    const here = endPoint(current.line, current.exit);
-
-    for (let line = 0; line < branches.length; line++) {
-      if (line === current.line) continue;
-      for (const entry of [0, 1] as const) {
-        const gap = distanceKm(toLatLon(here), toLatLon(endPoint(line, entry)));
-        if (gap > JOIN_TOLERANCE_KM) continue;
-
-        if (line === to.line) {
-          // Final branch: stop at the target vertex rather than traversing it all.
-          const points = branches[line];
-          const walk =
-            entry === 0
-              ? pathLengthKm(points.slice(0, to.vertex + 1))
-              : pathLengthKm(points.slice(to.vertex));
-          const total = currentCost + gap + walk;
-          if (!best || total < best.total) {
-            best = { state: current, total };
+function buildJunctions(branches: readonly (readonly Point[])[]): Junction[] {
+  const out: Junction[] = [];
+  for (let j = 0; j < branches.length; j++) {
+    // A branch can only *start* a join at one of its own ends -- that is where
+    // a cable physically terminates into another run.
+    for (const end of [0, branches[j].length - 1]) {
+      const point = branches[j][end];
+      for (let i = 0; i < branches.length; i++) {
+        if (i === j) continue;
+        const points = branches[i];
+        let bestVertex = -1;
+        let bestKm = Infinity;
+        for (let v = 0; v < points.length; v++) {
+          // ~3 degrees of latitude comfortably exceeds the join tolerance.
+          if (Math.abs(points[v][1] - point[1]) > 3) continue;
+          const km = distanceKm(toLatLon(point), toLatLon(points[v]));
+          if (km < bestKm) {
+            bestKm = km;
+            bestVertex = v;
           }
-          continue;
         }
-
-        const exit: 0 | 1 = entry === 0 ? 1 : 0;
-        const next: State = { line, exit };
-        const total = currentCost + gap + pathLengthKm(branches[line]);
-        if (total < (cost.get(key(next)) ?? Infinity)) {
-          cost.set(key(next), total);
-          previous.set(key(next), current);
-          queue.push(next);
+        if (bestVertex >= 0 && bestKm <= JOIN_TOLERANCE_KM) {
+          out.push({ aLine: j, aVertex: end, bLine: i, bVertex: bestVertex, km: bestKm });
         }
       }
     }
   }
+  return out;
+}
 
-  if (!best) return null;
+/** Distance from each branch's first vertex to every other, for O(1) spans. */
+function cumulative(branches: readonly (readonly Point[])[]): number[][] {
+  return branches.map((points) => {
+    const run = [0];
+    for (let v = 1; v < points.length; v++) {
+      run.push(run[v - 1] + distanceKm(toLatLon(points[v - 1]), toLatLon(points[v])));
+    }
+    return run;
+  });
+}
 
-  // Rebuild the branch order, then emit the vertices along it.
-  const order: State[] = [];
-  for (let cursor: State | null | undefined = best.state; cursor; cursor = previous.get(key(cursor))) {
-    order.unshift(cursor);
+interface Node {
+  line: number;
+  vertex: number;
+}
+
+const nodeKey = (node: Node): string => `${node.line}:${node.vertex}`;
+
+/**
+ * Walks a system from `from` to `to`, following branches and crossing between
+ * them at their junctions.
+ *
+ * Dijkstra over "ports" -- the handful of vertices per branch that matter: its
+ * two ends, wherever another branch meets it, and the entry/exit vertices for
+ * this particular query. Everything between two adjacent ports is a fixed span
+ * of the branch, so the graph stays tiny even for a 38-branch system.
+ */
+function pathThroughSystem(
+  branches: readonly (readonly Point[])[],
+  junctions: readonly Junction[],
+  cum: readonly number[][],
+  from: Nearest,
+  to: Nearest,
+): Point[] | null {
+  const ports: Set<number>[] = branches.map((points) => new Set([0, points.length - 1]));
+  for (const junction of junctions) {
+    ports[junction.aLine].add(junction.aVertex);
+    ports[junction.bLine].add(junction.bVertex);
+  }
+  ports[from.line].add(from.vertex);
+  ports[to.line].add(to.vertex);
+
+  const edges = new Map<string, { to: Node; km: number }[]>();
+  const link = (a: Node, b: Node, km: number): void => {
+    if (!edges.has(nodeKey(a))) edges.set(nodeKey(a), []);
+    edges.get(nodeKey(a))!.push({ to: b, km });
+  };
+
+  // Along each branch, between neighbouring ports.
+  ports.forEach((set, line) => {
+    const sorted = [...set].sort((x, y) => x - y);
+    for (let i = 1; i < sorted.length; i++) {
+      const lo = sorted[i - 1];
+      const hi = sorted[i];
+      const km = cum[line][hi] - cum[line][lo];
+      link({ line, vertex: lo }, { line, vertex: hi }, km);
+      link({ line, vertex: hi }, { line, vertex: lo }, km);
+    }
+  });
+
+  // And across the junctions, in both directions.
+  for (const junction of junctions) {
+    const a: Node = { line: junction.aLine, vertex: junction.aVertex };
+    const b: Node = { line: junction.bLine, vertex: junction.bVertex };
+    link(a, b, junction.km);
+    link(b, a, junction.km);
+  }
+
+  const source: Node = { line: from.line, vertex: from.vertex };
+  const target: Node = { line: to.line, vertex: to.vertex };
+  const cost = new Map<string, number>([[nodeKey(source), 0]]);
+  const previous = new Map<string, Node>();
+  const settled = new Set<string>();
+  const frontier: Node[] = [source];
+
+  while (frontier.length > 0) {
+    let bestAt = 0;
+    for (let i = 1; i < frontier.length; i++) {
+      if ((cost.get(nodeKey(frontier[i])) ?? Infinity) < (cost.get(nodeKey(frontier[bestAt])) ?? Infinity)) bestAt = i;
+    }
+    const current = frontier.splice(bestAt, 1)[0];
+    const key = nodeKey(current);
+    if (settled.has(key)) continue;
+    settled.add(key);
+    if (key === nodeKey(target)) break;
+
+    const here = cost.get(key) ?? Infinity;
+    for (const edge of edges.get(key) ?? []) {
+      const next = nodeKey(edge.to);
+      if (settled.has(next)) continue;
+      const candidate = here + edge.km;
+      if (candidate < (cost.get(next) ?? Infinity)) {
+        cost.set(next, candidate);
+        previous.set(next, current);
+        frontier.push(edge.to);
+      }
+    }
+  }
+
+  if (!cost.has(nodeKey(target))) return null;
+
+  const nodes: Node[] = [target];
+  for (let cursor = previous.get(nodeKey(target)); cursor; cursor = previous.get(nodeKey(cursor))) {
+    nodes.unshift(cursor);
+    if (nodeKey(cursor) === nodeKey(source)) break;
   }
 
   const out: Point[] = [];
-  order.forEach((state, position) => {
-    const points = branches[state.line];
-    let slice: Point[];
-    if (position === 0) {
-      slice = state.exit === 0 ? points.slice(0, from.vertex + 1).reverse() : points.slice(from.vertex);
-    } else {
-      slice = state.exit === 0 ? points.slice().reverse() : points.slice();
-    }
-    out.push(...(out.length === 0 ? slice : slice.slice(1)));
-  });
+  const push = (point: Point): void => {
+    const last = out[out.length - 1];
+    if (!last || last[0] !== point[0] || last[1] !== point[1]) out.push(point);
+  };
 
-  // And the final branch, entered from whichever end is nearer where we are.
-  const tail = branches[to.line];
-  const last = out.length > 0 ? out[out.length - 1] : endPoint(from.line, 0);
-  const fromStart = distanceKm(toLatLon(last), toLatLon(tail[0]));
-  const fromEnd = distanceKm(toLatLon(last), toLatLon(tail[tail.length - 1]));
-  const tailSlice =
-    fromStart <= fromEnd ? tail.slice(0, to.vertex + 1) : tail.slice(to.vertex).slice().reverse();
-  out.push(...tailSlice);
+  push(branches[nodes[0].line][nodes[0].vertex]);
+  for (let i = 1; i < nodes.length; i++) {
+    const a = nodes[i - 1];
+    const b = nodes[i];
+    if (a.line !== b.line) {
+      // A junction hop: the two vertices are within tolerance of each other,
+      // so stepping straight across is the join itself.
+      push(branches[b.line][b.vertex]);
+      continue;
+    }
+    const points = branches[a.line];
+    if (a.vertex <= b.vertex) {
+      for (let v = a.vertex + 1; v <= b.vertex; v++) push(points[v]);
+    } else {
+      for (let v = a.vertex - 1; v >= b.vertex; v--) push(points[v]);
+    }
+  }
 
   return out.length >= 2 ? out : null;
 }
 
 export function createCablePathIndex(collection: CableCollection): CablePathIndex {
-  const systems: { branches: Point[][] }[] = collection.features.map((feature: CableFeature) => ({
+  interface System {
+    branches: Point[][];
+    /* Junctions and spans are properties of the cable, not of the query, so
+       they are worked out once on first use and kept. */
+    junctions?: Junction[];
+    cum?: number[][];
+  }
+
+  const systems: System[] = collection.features.map((feature: CableFeature) => ({
     branches: cableSegments(feature).filter((segment) => segment.length >= 2),
   }));
 
@@ -219,7 +292,10 @@ export function createCablePathIndex(collection: CableCollection): CablePathInde
         const to = nearestVertex(system.branches, b);
         if (to.km > LANDING_TOLERANCE_KM) continue;
 
-        const path = pathThroughSystem(system.branches, from, to);
+        system.junctions ??= buildJunctions(system.branches);
+        system.cum ??= cumulative(system.branches);
+
+        const path = pathThroughSystem(system.branches, system.junctions, system.cum, from, to);
         if (!path) continue;
 
         /*
