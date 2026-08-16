@@ -33,6 +33,12 @@ export interface OrbitControlsOptions {
   onTap?: (clientX: number, clientY: number) => void;
   /** Fired the moment the user grabs the globe, so a running shot can stand down. */
   onUserTakeControl?: () => void;
+  /**
+   * Fired instead of zooming while a scripted shot owns the camera (i.e. the
+   * journey is playing) — lets the globe itself drive story progression, the
+   * same way scrolling the sidebar already does.
+   */
+  onWheelWhileSuspended?: (deltaY: number) => void;
   minDistance?: number;
   maxDistance?: number;
 }
@@ -47,6 +53,8 @@ export interface OrbitControls {
   suspend(): void;
   /** Takes the camera back from wherever the director left it, without a jump. */
   resume(): void;
+  /** Whether a scripted shot currently owns the camera. */
+  isSuspended(): boolean;
   dispose(): void;
 }
 
@@ -174,6 +182,12 @@ export function attachOrbitControls(globe: GlobeScene, options: OrbitControlsOpt
 
   function onWheel(event: WheelEvent): void {
     event.preventDefault();
+    // While a scripted shot is playing, the wheel drives story progression
+    // instead of zoom — the globe becomes another scrollbar for the journey.
+    if (suspended) {
+      options.onWheelWhileSuspended?.(event.deltaY);
+      return;
+    }
     userHasZoomed = true;
     setDistance(distance * (1 + event.deltaY * 0.0012));
     markInteraction();
@@ -329,5 +343,5 @@ export function attachOrbitControls(globe: GlobeScene, options: OrbitControlsOpt
 
   applyCamera();
 
-  return { update, focusOn, refit, suspend, resume, dispose };
+  return { update, focusOn, refit, suspend, resume, isSuspended: () => suspended, dispose };
 }

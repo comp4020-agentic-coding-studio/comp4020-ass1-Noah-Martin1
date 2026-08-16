@@ -252,6 +252,11 @@ function updateHint(next: Phase): void {
 
 const controls = attachOrbitControls(globe, {
   onUserTakeControl: releaseShot,
+  // Once the journey is playing, the globe becomes another scrollbar for it —
+  // the same story.el the sidebar already scrolls to drive setStageIndex.
+  onWheelWhileSuspended(deltaY) {
+    story.el.scrollTop += deltaY;
+  },
   onTap(clientX, clientY) {
     if (phase === "journey") return;
 

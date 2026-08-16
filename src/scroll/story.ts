@@ -66,6 +66,12 @@ export function createStoryPanel(): StoryPanel {
       list.append(section);
     });
 
+    // A rebuild (e.g. toggling Starlink) replaces the list in place without
+    // otherwise touching scroll position, so a sidebar already scrolled partway
+    // into the old route would open mid-way into the new one — stage 2 visible
+    // before stage 1 has ever been seen. Every fresh route starts at the top.
+    el.scrollTop = 0;
+
     observer = new IntersectionObserver(
       (entries) => {
         // At the bottom several stages are fully visible at once, so whichever
