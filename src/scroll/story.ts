@@ -14,6 +14,49 @@ export interface StoryPanel {
   el: HTMLElement;
 }
 
+/**
+ * Which stage the panel is currently "on", from scroll geometry alone.
+ *
+ * Pure and exported so the geometry can be checked at both viewport shapes
+ * without a layout engine — the desktop/mobile difference below is a real bug
+ * this once shipped, not a hypothetical.
+ *
+ * The reading line sweeps from the top of the panel to the bottom as the user
+ * scrolls, rather than sitting permanently at the centre. A fixed centre line
+ * is only correct when the content is much taller than the panel: on a desktop
+ * sidebar around 1000px tall, stage 1's centre sits near 100px while the centre
+ * line starts at 500px, which lands on stage 2 — so the journey opened on stage
+ * 2 with stage 1 greyed out, having never been active. Mobile escaped it purely
+ * because a ~300px panel puts the centre line at 150px, still nearest stage 1.
+ *
+ * Anchoring the line to scroll progress makes both ends exact: at the top it is
+ * the top of the panel, at the bottom it is the bottom, and it passes through
+ * the centre in between. It stays monotonic in `scrollTop`, which is what the
+ * scroll-position approach exists to guarantee.
+ */
+export function pickStageIndex(
+  scrollTop: number,
+  clientHeight: number,
+  scrollHeight: number,
+  stageCentres: readonly number[],
+): number {
+  if (stageCentres.length === 0) return 0;
+  const maxScroll = Math.max(0, scrollHeight - clientHeight);
+  const progress = maxScroll > 0 ? Math.min(1, Math.max(0, scrollTop / maxScroll)) : 0;
+  const target = scrollTop + clientHeight * progress;
+
+  let bestIndex = 0;
+  let bestDistance = Infinity;
+  stageCentres.forEach((centre, index) => {
+    const distance = Math.abs(centre - target);
+    if (distance < bestDistance) {
+      bestDistance = distance;
+      bestIndex = index;
+    }
+  });
+  return bestIndex;
+}
+
 export function createStoryPanel(): StoryPanel {
   const el = document.createElement("div");
   el.className = "story";
@@ -77,7 +120,8 @@ export function createStoryPanel(): StoryPanel {
   }
 
   /**
-   * Picks the stage nearest the vertical centre of the panel and reports it.
+   * Measures the stages and reports which one is active (see `pickStageIndex`
+   * for how the choice is made).
    *
    * This used to be an IntersectionObserver comparing intersection ratios
    * across whichever entries happened to cross a threshold in a given batch.
@@ -101,18 +145,12 @@ export function createStoryPanel(): StoryPanel {
       setStageIndex(lastRoute.steps.length);
       return;
     }
-    const target = el.scrollTop + el.clientHeight / 2;
-    let bestIndex = 0;
-    let bestDistance = Infinity;
+    const centres: number[] = [];
     for (const child of list.children) {
       const section = child as HTMLElement;
-      const center = section.offsetTop + section.offsetHeight / 2;
-      const distance = Math.abs(center - target);
-      if (distance < bestDistance) {
-        bestDistance = distance;
-        bestIndex = Number(section.dataset.index);
-      }
+      centres.push(section.offsetTop + section.offsetHeight / 2);
     }
+    const bestIndex = pickStageIndex(el.scrollTop, el.clientHeight, el.scrollHeight, centres);
     setStageIndex(bestIndex + 1);
   }
 
