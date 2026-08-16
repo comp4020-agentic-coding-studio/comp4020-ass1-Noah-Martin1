@@ -224,18 +224,29 @@ function applyPhase(next: Phase): void {
   if (next === "choose-origin") {
     const gesture = coarsePointer.matches ? "Press and drag over the globe" : "Hover the globe";
     prompt.show(
-      "Where should the request start?",
+      "Choose where to send from",
       state.starlinkOn
         ? `${gesture} — green means Starlink serves that spot. Tap to choose.`
         : `${gesture} — green means there's mobile coverage. Tap to choose.`,
     );
   } else if (next === "choose-destination") {
     prompt.show(
-      "Now pick where it's going.",
+      "Now pick the destination data centre",
       "The cyan markers are real data centres — the cursor snaps to the nearest one. Tap to choose.",
     );
   } else {
-    prompt.show("Scroll to follow the request.", "Each step explains what the network is doing.");
+    prompt.show("Scroll to follow the request.", "Scroll the globe or the steps on the right — either one moves you through the journey.");
+  }
+  updateHint(next);
+}
+
+const hint = required("page-hint", HTMLElement);
+
+function updateHint(next: Phase): void {
+  if (next === "journey") {
+    hint.textContent = "Scroll the globe or the sidebar to progress · drag the globe to look around";
+  } else {
+    hint.textContent = "Drag to rotate · scroll to zoom · tap a city to select it";
   }
 }
 

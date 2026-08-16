@@ -13,29 +13,54 @@ import {
 const ORIGIN_OPTIONS = citiesWithKind("origin").slice().sort((a, b) => a.name.localeCompare(b.name));
 const DEST_OPTIONS = citiesWithKind("server").slice().sort((a, b) => a.name.localeCompare(b.name));
 
-const LAYER_LABELS: Record<keyof LayerVisibility, string> = {
+/*
+ * Ground stations moved into the Starlink mode box (they're only meaningful
+ * alongside Starlink), so this fieldset now covers the three layers that
+ * apply regardless of mode.
+ */
+const LAYER_LABELS: Record<Exclude<keyof LayerVisibility, "groundStations">, string> = {
   fibre: "Fibre cables",
   towers: "5G towers",
-  groundStations: "Ground stations",
   servers: "Servers",
 };
 
 /*
- * On a 390px screen the four full labels wrap onto a second row, and that row
- * is taken straight out of the globe's height. The short forms keep all four
- * togglable in one row; the full label stays as the accessible name so nothing
- * is lost to a screen reader.
+ * On a 390px screen the full labels wrap onto a second row, and that row is
+ * taken straight out of the globe's height. The short forms keep them all
+ * togglable in one row; the full label stays as the accessible name so
+ * nothing is lost to a screen reader.
  */
-const LAYER_SHORT: Record<keyof LayerVisibility, string> = {
+const LAYER_SHORT: Record<Exclude<keyof LayerVisibility, "groundStations">, string> = {
   fibre: "Fibre",
   towers: "5G",
-  groundStations: "Ground",
   servers: "Servers",
 };
 
 export interface ControlPanel {
   el: HTMLElement;
   setFeedback(message: string | null): void;
+}
+
+/** The Starlink/Ground-station switches share one look; built once, used twice. */
+function buildSwitch(
+  id: string,
+  labelText: string,
+  onChange: (checked: boolean) => void,
+): { wrap: HTMLElement; input: HTMLInputElement } {
+  const wrap = document.createElement("label");
+  wrap.className = "switch";
+  const input = document.createElement("input");
+  input.type = "checkbox";
+  input.id = id;
+  input.addEventListener("change", () => onChange(input.checked));
+  const track = document.createElement("span");
+  track.className = "switch-track";
+  track.setAttribute("aria-hidden", "true");
+  const text = document.createElement("span");
+  text.className = "switch-label";
+  text.textContent = labelText;
+  wrap.append(input, track, text);
+  return { wrap, input };
 }
 
 function citySelect(id: string, labelText: string): { wrap: HTMLElement; select: HTMLSelectElement } {
@@ -92,19 +117,26 @@ export function createControlPanel(): ControlPanel {
   row.className = "panel-row";
   row.append(originWrap, destWrap);
 
-  const starlinkWrap = document.createElement("label");
-  starlinkWrap.className = "switch";
-  const starlinkInput = document.createElement("input");
-  starlinkInput.type = "checkbox";
-  starlinkInput.id = "starlink-toggle";
-  starlinkInput.addEventListener("change", () => setStarlink(starlinkInput.checked));
-  const starlinkTrack = document.createElement("span");
-  starlinkTrack.className = "switch-track";
-  starlinkTrack.setAttribute("aria-hidden", "true");
-  const starlinkText = document.createElement("span");
-  starlinkText.className = "switch-label";
-  starlinkText.textContent = "Starlink";
-  starlinkWrap.append(starlinkInput, starlinkTrack, starlinkText);
+  // The tap-the-globe flow (driven by the on-globe prompt) is the primary way
+  // to choose a route; these menus stay for keyboard/screen-reader use and for
+  // anyone who'd rather type, but sit behind a disclosure so they don't compete
+  // with the prompt for attention.
+  const picker = document.createElement("details");
+  picker.className = "picker-fallback";
+  const pickerSummary = document.createElement("summary");
+  pickerSummary.textContent = "Prefer to pick from a list?";
+  picker.append(pickerSummary, row);
+
+  const { wrap: starlinkWrap, input: starlinkInput } = buildSwitch("starlink-toggle", "Use Starlink?", setStarlink);
+  const { wrap: groundWrap, input: groundInput } = buildSwitch("ground-toggle", "Show ground stations", (checked) =>
+    setLayer("groundStations", checked),
+  );
+
+  const modeBox = document.createElement("fieldset");
+  modeBox.className = "mode-box";
+  const modeLegend = document.createElement("legend");
+  modeLegend.textContent = "Connectivity";
+  modeBox.append(modeLegend, starlinkWrap, groundWrap);
 
   const randomButton = document.createElement("button");
   randomButton.type = "button";
@@ -114,7 +146,7 @@ export function createControlPanel(): ControlPanel {
 
   const actionsRow = document.createElement("div");
   actionsRow.className = "panel-row panel-row-actions";
-  actionsRow.append(starlinkWrap, randomButton);
+  actionsRow.append(modeBox, randomButton);
 
   const layersFieldset = document.createElement("fieldset");
   layersFieldset.className = "layers";
@@ -122,8 +154,8 @@ export function createControlPanel(): ControlPanel {
   legend.textContent = "Highlight infrastructure";
   layersFieldset.append(legend);
 
-  const layerInputs: Partial<Record<keyof LayerVisibility, HTMLInputElement>> = {};
-  for (const key of Object.keys(LAYER_LABELS) as (keyof LayerVisibility)[]) {
+  const layerInputs: Partial<Record<Exclude<keyof LayerVisibility, "groundStations">, HTMLInputElement>> = {};
+  for (const key of Object.keys(LAYER_LABELS) as Exclude<keyof LayerVisibility, "groundStations">[]) {
     const label = document.createElement("label");
     label.className = "pill";
     const input = document.createElement("input");
@@ -147,14 +179,14 @@ export function createControlPanel(): ControlPanel {
   feedback.setAttribute("role", "status");
   feedback.setAttribute("aria-live", "polite");
 
-  el.append(row, actionsRow, layersFieldset, feedback);
+  el.append(picker, actionsRow, layersFieldset, feedback);
 
   function setFeedback(message: string | null): void {
     feedback.textContent = message ?? "";
     feedback.classList.toggle("feedback-visible", Boolean(message));
   }
 
-  subscribe((s) => {
+  function sync(s: typeof state): void {
     // A point picked off the globe has no city id, so the menu shows nothing
     // selected — which is honest: the origin genuinely isn't one of its options.
     const originValue = s.origin?.cityId ?? "";
@@ -162,22 +194,19 @@ export function createControlPanel(): ControlPanel {
     const destValue = s.destination?.cityId ?? "";
     if (destSelect.value !== destValue) destSelect.value = destValue;
     starlinkInput.checked = s.starlinkOn;
-    for (const key of Object.keys(LAYER_LABELS) as (keyof LayerVisibility)[]) {
+    groundInput.checked = s.layers.groundStations;
+    for (const key of Object.keys(LAYER_LABELS) as Exclude<keyof LayerVisibility, "groundStations">[]) {
       const input = layerInputs[key];
       if (input) input.checked = s.layers[key];
     }
-  });
+  }
+
+  subscribe(sync);
 
   // Initial sync: subscribe() only fires on change, so the controls have to be
   // seeded from the starting state or the Starlink switch would read "off"
   // while the constellation is on screen.
-  originSelect.value = state.origin?.cityId ?? "";
-  destSelect.value = state.destination?.cityId ?? "";
-  starlinkInput.checked = state.starlinkOn;
-  for (const key of Object.keys(LAYER_LABELS) as (keyof LayerVisibility)[]) {
-    const input = layerInputs[key];
-    if (input) input.checked = state.layers[key];
-  }
+  sync(state);
 
   return { el, setFeedback };
 }

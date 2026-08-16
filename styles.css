@@ -301,25 +301,48 @@ canvas:focus-visible {
 }
 
 .prompt {
-  max-width: 46ch;
+  max-width: 50ch;
   text-align: center;
   background: var(--panel-bg);
-  border: 1px solid var(--hair);
-  border-radius: 12px;
-  padding: 9px 16px;
+  border: 1px solid rgb(84 255 143 / 55%);
+  border-radius: 14px;
+  padding: 14px 22px;
   backdrop-filter: blur(12px);
+  box-shadow:
+    0 0 0 1px rgb(84 255 143 / 12%),
+    0 6px 28px rgb(84 255 143 / 14%);
+  animation: prompt-in 0.35s ease;
+}
+
+@keyframes prompt-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .prompt {
+    animation: none;
+  }
 }
 
 .prompt-title {
   margin: 0;
-  font-size: 0.92rem;
-  font-weight: 600;
+  font-size: 1.12rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
 }
 
 .prompt-detail {
-  margin: 3px 0 0;
-  font-size: 0.76rem;
-  line-height: 1.4;
+  margin: 5px 0 0;
+  font-size: 0.82rem;
+  line-height: 1.45;
   color: var(--muted);
 }
 
@@ -420,6 +443,64 @@ canvas:focus-visible {
 .panel-row-actions {
   grid-template-columns: auto 1fr;
   align-items: center;
+}
+
+/* --- the fallback picker: kept for keyboard/screen-reader use, but visually
+   secondary to the on-globe prompt, which is the primary way to choose a
+   route now. --- */
+
+.panel .picker-fallback summary {
+  cursor: pointer;
+  color: var(--muted);
+  font-family: var(--font-display);
+  font-size: 0.7rem;
+  letter-spacing: 0.03em;
+  list-style: none;
+}
+
+.panel .picker-fallback summary::-webkit-details-marker {
+  display: none;
+}
+
+.panel .picker-fallback summary::before {
+  content: "▸";
+  display: inline-block;
+  margin-right: 6px;
+  transition: transform 0.15s ease;
+}
+
+.panel .picker-fallback[open] summary::before {
+  transform: rotate(90deg);
+}
+
+.panel .picker-fallback summary:hover {
+  color: var(--ink);
+}
+
+.picker-fallback .panel-row {
+  margin-top: 8px;
+}
+
+/* --- Starlink + ground stations: grouped because one only matters with the
+   other, kept as two separate switches. --- */
+
+.mode-box {
+  border: 1px solid var(--hair);
+  border-radius: 10px;
+  margin: 0;
+  padding: 8px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.mode-box legend {
+  color: var(--muted);
+  font-family: var(--font-display);
+  font-size: 0.66rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 0 4px;
 }
 
 .field {
@@ -720,6 +801,15 @@ canvas:focus-visible {
 
   .layers legend {
     padding: 0 0 1px;
+  }
+
+  .mode-box {
+    padding: 6px 9px;
+    gap: 4px;
+  }
+
+  .picker-fallback summary {
+    font-size: 0.66rem;
   }
 
   .pill {
