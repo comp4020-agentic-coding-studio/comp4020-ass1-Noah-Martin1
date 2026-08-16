@@ -13,26 +13,6 @@
   <body>
     <a class="skip-link" href="#story-host">Skip to route explanation</a>
 
-    <!-- In normal document flow, one viewport tall. The globe and its UI below
-         are `position: fixed` and already full-screen underneath this from the
-         first paint; scrolling this section out of the way is what "reveals"
-         them, rather than anything being loaded or animated in. -->
-    <section class="hero">
-      <div class="hero-stars" aria-hidden="true"></div>
-      <div class="hero-body">
-        <p class="hero-eyebrow">COMP4020 · interactive visualisation</p>
-        <h1 class="hero-title">Visualise your internet requests</h1>
-        <p class="hero-subtitle">
-          Pick a place to send from and a data centre to send to, and follow the actual path an internet request
-          takes to get there — over 5G and fibre, or up through a Starlink satellite.
-        </p>
-        <button type="button" class="hero-cta" id="hero-cta">
-          Scroll to begin
-          <span aria-hidden="true">↓</span>
-        </button>
-      </div>
-    </section>
-
     <!-- Full-bleed: space runs edge to edge at any window size, and the globe is
          framed inside it by #globe-focus rather than by the canvas bounds. -->
     <canvas
@@ -44,7 +24,7 @@
 
     <div class="ui">
       <header class="site-header">
-        <p class="site-title">Visualise your internet requests</p>
+        <h1>Visualise your internet requests</h1>
         <nav aria-label="Primary">
           <a href="./" aria-current="page">Home</a>
         </nav>
