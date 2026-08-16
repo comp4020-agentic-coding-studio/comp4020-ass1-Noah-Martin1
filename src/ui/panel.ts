@@ -22,7 +22,7 @@ const DEST_OPTIONS = citiesWithKind("server").slice().sort((a, b) => a.name.loca
  */
 const LAYER_LABELS: Record<Exclude<keyof LayerVisibility, "groundStations">, string> = {
   fibre: "Fibre cables",
-  towers: "5G towers",
+  towers: "Cell towers",
   servers: "Servers",
 };
 
@@ -34,7 +34,7 @@ const LAYER_LABELS: Record<Exclude<keyof LayerVisibility, "groundStations">, str
  */
 const LAYER_SHORT: Record<Exclude<keyof LayerVisibility, "groundStations">, string> = {
   fibre: "Fibre",
-  towers: "5G",
+  towers: "Towers",
   servers: "Servers",
 };
 
