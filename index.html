@@ -25,21 +25,35 @@
     <div class="ui">
       <header class="site-header">
         <h1>Visualise your internet requests</h1>
-        <nav aria-label="Primary">
-          <a href="./" aria-current="page">Home</a>
-        </nav>
       </header>
 
       <aside id="control-host" aria-label="Route controls">
-        <p class="hint" id="page-hint">Drag to rotate · scroll to zoom · tap a city to select it</p>
-        <div id="control-panel-host"></div>
-        <!-- The disclaimer is always visible; the per-dataset attributions sit
-             behind a disclosure so they cannot crowd out the globe on a phone. -->
-        <p class="data-note">Routes are simplified illustrations of real infrastructure, not live traceroutes.</p>
-        <details class="data-sources">
-          <summary>Where this data comes from</summary>
-          <p id="data-note" role="status" aria-live="polite"></p>
-        </details>
+        <!-- Part of the sidebar's flex layout, not floated off its edge: this
+             strip never scrolls and never overflows, so the collapse control
+             stays reachable at any viewport height. -->
+        <div class="sidebar-rail">
+          <nav class="rail-nav" aria-label="Primary">
+            <a class="rail-link" href="./" aria-current="page">
+              <span class="rail-glyph" aria-hidden="true">◉</span>
+              <span class="rail-label">Globe</span>
+            </a>
+            <a class="rail-link" href="./about.html">
+              <span class="rail-glyph" aria-hidden="true">i</span>
+              <span class="rail-label">About</span>
+            </a>
+          </nav>
+        </div>
+        <div class="control-host-inner">
+          <p class="hint" id="page-hint">Drag to rotate · scroll to zoom · tap a city to select it</p>
+          <div id="control-panel-host"></div>
+          <!-- The disclaimer is always visible; the per-dataset attributions sit
+               behind a disclosure so they cannot crowd out the globe on a phone. -->
+          <p class="data-note">Routes are simplified illustrations of real infrastructure, not live traceroutes.</p>
+          <details class="data-sources">
+            <summary>Where this data comes from</summary>
+            <p id="data-note" role="status" aria-live="polite"></p>
+          </details>
+        </div>
       </aside>
 
       <div class="stage-column">

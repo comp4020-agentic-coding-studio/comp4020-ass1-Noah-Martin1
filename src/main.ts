@@ -30,6 +30,7 @@ import { createStoryPanel } from "./scroll/story";
 import { setDestination, setOrigin, setTowerLookup, state, subscribe } from "./state";
 import { createControlPanel } from "./ui/panel";
 import { createPrompt } from "./ui/prompt";
+import { initSidebarToggle } from "./ui/sidebar-toggle";
 
 /** Looks up a required element and narrows it, so the rest of the module (and
  *  every closure in it) can treat these as non-null. */
@@ -56,6 +57,23 @@ storyHost.append(story.el);
 
 const prompt = createPrompt();
 promptHost.append(prompt.el);
+
+const sidebar = initSidebarToggle("control-host", "controls");
+
+/*
+ * Narrow screens only. On a phone the controls sit in a band above the story
+ * sheet, and during the journey that band is spending height on choices the
+ * user has already made -- so it folds away to the pill and the globe gets the
+ * space. It reopens on the way back out, and never fights a deliberate choice:
+ * this only runs when the phase itself changes.
+ */
+const narrowScreen = window.matchMedia("(width <= 860px)");
+
+function syncSidebarToPhase(next: Phase): void {
+  document.body.dataset.phase = next;
+  if (!sidebar || !narrowScreen.matches) return;
+  sidebar.setCollapsed(next === "journey");
+}
 
 // --- scene graph ---------------------------------------------------------
 
@@ -194,6 +212,7 @@ const coarsePointer = window.matchMedia("(pointer: coarse)");
 
 function applyPhase(next: Phase): void {
   phase = next;
+  syncSidebarToPhase(next);
   const choosing = next !== "journey";
   hover.setEnabled(choosing);
 
@@ -616,6 +635,18 @@ loadStarlink()
 // --- frame loop -----------------------------------------------------------
 
 let lastTime = performance.now();
+
+/*
+ * Coming back to a backgrounded tab, the first frame's delta covers the whole
+ * time away. Re-basing the clock here (rather than only clamping it) means the
+ * quality controller never even sees that number, and the first visible frame
+ * advances the animation by one frame's worth instead of a stall's worth.
+ */
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState !== "visible") return;
+  lastTime = performance.now();
+  globe.resetFrameSampling();
+});
 
 function frame(now: number): void {
   const elapsed = now - lastTime;

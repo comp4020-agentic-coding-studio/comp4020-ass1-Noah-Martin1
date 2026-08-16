@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="en-AU">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>About · Visualise your internet requests</title>
+    <meta
+      name="description"
+      content="What this visualisation shows, where its data comes from, and how it simplifies the real internet."
+    />
+    <link rel="stylesheet" href="./styles.css" />
+    <link rel="stylesheet" href="./about.css" />
+  </head>
+  <body class="page-about">
+    <a class="skip-link" href="#about-main">Skip to content</a>
+
+    <div class="about-shell">
+      <!-- The same rail as the globe page, minus the collapse control: there is
+           no panel to collapse here, but navigation stays in one place. -->
+      <aside class="about-rail" aria-label="Site navigation">
+        <div class="sidebar-rail">
+          <nav class="rail-nav" aria-label="Primary">
+            <a class="rail-link" href="./">
+              <span class="rail-glyph" aria-hidden="true">◉</span>
+              <span class="rail-label">Globe</span>
+            </a>
+            <a class="rail-link" href="./about.html" aria-current="page">
+              <span class="rail-glyph" aria-hidden="true">i</span>
+              <span class="rail-label">About</span>
+            </a>
+          </nav>
+        </div>
+      </aside>
+
+      <main id="about-main" class="about-main">
+        <header class="about-header">
+          <p class="about-eyebrow">About this project</p>
+          <h1>Following a request around the world</h1>
+          <p class="about-lede">
+            When you open a website, something physical happens: a signal leaves your device, crosses radio, glass and
+            ocean, and arrives at a machine in a building somewhere else on Earth. This site turns that invisible
+            journey into something you can watch, step by step, on a globe.
+          </p>
+        </header>
+
+        <section class="about-section">
+          <h2>What you are looking at</h2>
+          <p>
+            You choose two points — where a request starts, and the data centre it is heading for — and the globe builds
+            a route between them. Scrolling moves the request one hop at a time, and each hop explains the piece of
+            infrastructure it is passing through: the tower that picks up your phone's radio signal, the fibre that
+            carries it inland, the exchange points where separate networks hand traffic to each other, the submarine
+            cables that cross oceans, and the data centre at the far end. A second path, in blue, traces the reply
+            coming back.
+          </p>
+          <p>
+            With Starlink switched on the route takes a different shape. The request climbs to a satellite in low Earth
+            orbit, may hop between satellites, and comes back down at a ground station before rejoining the ordinary
+            terrestrial network — which is the part people are usually most surprised by.
+          </p>
+        </section>
+
+        <section class="about-section">
+          <h2>Where the data comes from</h2>
+          <p>
+            The geography is real, and it is bundled with the site rather than fetched live, so the same thing renders
+            the same way every time.
+          </p>
+          <ul class="about-list">
+            <li>
+              <strong>Satellites</strong> — orbital elements from CelesTrak's public catalogue, propagated in the
+              browser. The dated snapshot and satellite count are shown on the globe page.
+            </li>
+            <li><strong>Coastlines, cities and place names</strong> — Natural Earth (public domain).</li>
+            <li><strong>Submarine cables</strong> — TeleGeography's public cable map dataset.</li>
+            <li><strong>Data centres</strong> — sites tagged in OpenStreetMap, under the ODbL.</li>
+            <li>
+              <strong>Mobile coverage</strong> — a rasterised OpenCelliD snapshot published by the World Bank, sampled
+              so that populated regions everywhere are represented rather than only dense city centres.
+            </li>
+            <li><strong>Starlink availability and ground stations</strong> — SpaceX's published coverage information.</li>
+          </ul>
+        </section>
+
+        <section class="about-section">
+          <h2>What it is not</h2>
+          <p>
+            This is an educational representation, not a measurement. Nothing here is a live packet capture, and the
+            route you see is not the exact path a specific request took.
+          </p>
+          <ul class="about-list">
+            <li>
+              <strong>Routes are plausible, not observed.</strong> They are built from real infrastructure — real cable
+              landings, real facilities, real orbits — but a real request is decided hop by hop by routing protocols,
+              and may take a different path each time.
+            </li>
+            <li>
+              <strong>Hops are summarised.</strong> A real traceroute crosses many more routers than the handful of
+              stages shown. The stages stand for the major changes in the kind of infrastructure being used, which is
+              the thing worth understanding first.
+            </li>
+            <li>
+              <strong>Satellite motion is sped up.</strong> Orbits run at roughly ten times real time so the movement is
+              visible, and are propagated with a simplified orbital model rather than a full-precision one.
+            </li>
+            <li>
+              <strong>Coverage is modelled.</strong> A green marker means the simplified model treats that area as
+              connected. It is not a guarantee that a particular network reaches a particular address.
+            </li>
+          </ul>
+        </section>
+
+        <section class="about-section">
+          <h2>Why bother visualising it</h2>
+          <p>
+            The internet is usually described in metaphors — the cloud, the web, a series of tubes — that quietly
+            suggest it has no location. It does. Latency is distance. An ocean is a delay. A request from a remote town
+            travels differently from one sent in a capital city, and the reason is physical infrastructure that mostly
+            exists in places nobody thinks about.
+          </p>
+          <p>
+            Seeing a request move across a globe makes those relationships concrete in a way a diagram does not: why
+            distant servers feel slower, why undersea cables matter, what a satellite link actually buys you, and what a
+            traceroute is really telling you when it prints a list of names.
+          </p>
+        </section>
+
+        <p class="about-return">
+          <a class="about-cta" href="./">Back to the globe →</a>
+        </p>
+      </main>
+    </div>
+  </body>
+</html>

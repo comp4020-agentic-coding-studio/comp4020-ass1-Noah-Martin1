@@ -1,0 +1,173 @@
+/*
+ * The About page reuses styles.css for its tokens, typography and the shared
+ * navigation rail, then overrides the few things that only make sense on the
+ * globe page. Keeping one source of colour and type is what stops this page
+ * from drifting into looking like a different website.
+ */
+
+.page-about {
+  /* The globe page locks scrolling because the canvas owns the viewport; a
+     document page has to scroll. */
+  overflow: visible;
+  background:
+    radial-gradient(ellipse 80% 55% at 18% -10%, rgb(76 155 255 / 14%), transparent 70%),
+    radial-gradient(ellipse 60% 45% at 90% 8%, rgb(192 139 255 / 10%), transparent 70%),
+    var(--bg);
+  min-height: 100%;
+}
+
+.about-shell {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  min-height: 100dvh;
+}
+
+.about-rail {
+  display: flex;
+  flex-direction: column;
+  background: linear-gradient(180deg, rgb(9 16 32 / 85%), rgb(4 7 16 / 88%));
+  border-right: 1px solid var(--blue-line);
+  backdrop-filter: blur(14px);
+}
+
+/* The rail spans the full page height, so pinning the nav inside it is what
+   keeps navigation reachable once the reader has scrolled down. */
+.about-rail .sidebar-rail {
+  position: sticky;
+  top: 0;
+}
+
+.about-main {
+  max-width: 74ch;
+  padding: clamp(28px, 5vw, 72px) clamp(20px, 5vw, 64px) 96px;
+}
+
+.about-eyebrow {
+  font-family: var(--font-display);
+  font-size: 0.7rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--blue);
+  margin: 0 0 12px;
+}
+
+.about-header h1 {
+  font-size: clamp(1.7rem, 4.2vw, 2.6rem);
+  line-height: 1.15;
+  letter-spacing: -0.02em;
+  margin: 0 0 18px;
+}
+
+.about-lede {
+  font-size: clamp(1rem, 1.6vw, 1.14rem);
+  line-height: 1.65;
+  color: var(--ink);
+  margin: 0;
+  max-width: 62ch;
+}
+
+.about-header {
+  padding-bottom: 34px;
+  border-bottom: 1px solid var(--hair);
+  margin-bottom: 8px;
+}
+
+.about-section {
+  padding-top: 38px;
+}
+
+.about-section h2 {
+  font-size: 1.18rem;
+  letter-spacing: -0.01em;
+  margin: 0 0 14px;
+  padding-left: 14px;
+  border-left: 2px solid var(--blue);
+}
+
+.about-section p {
+  font-size: 0.95rem;
+  line-height: 1.72;
+  color: rgb(233 237 246 / 82%);
+  margin: 0 0 14px;
+}
+
+.about-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 10px;
+}
+
+.about-list li {
+  font-size: 0.92rem;
+  line-height: 1.65;
+  color: rgb(233 237 246 / 78%);
+  background: rgb(76 155 255 / 4%);
+  border: 1px solid var(--blue-line);
+  border-radius: 12px;
+  padding: 12px 16px;
+}
+
+.about-list strong {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.about-return {
+  margin: 46px 0 0;
+}
+
+.about-cta {
+  display: inline-block;
+  color: var(--accent);
+  font-family: var(--font-display);
+  font-size: 0.85rem;
+  letter-spacing: 0.03em;
+  background: rgb(84 255 143 / 5%);
+  border: 1px solid rgb(84 255 143 / 40%);
+  border-radius: 999px;
+  padding: 11px 22px;
+  transition:
+    border-color 0.2s ease,
+    box-shadow 0.2s ease,
+    background 0.2s ease;
+}
+
+.about-cta:hover,
+.about-cta:focus-visible {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: rgb(84 255 143 / 10%);
+  box-shadow: 0 0 18px rgb(84 255 143 / 32%);
+}
+
+@media (width <= 860px) {
+  /* The rail becomes a bar across the top: a 56px column would take a seventh
+     of a 390px screen and leave the text squeezed beside it. */
+  .about-shell {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .about-rail {
+    z-index: 2;
+    border-right: none;
+    border-bottom: 1px solid var(--blue-line);
+  }
+
+  .about-rail .sidebar-rail,
+  .about-rail .rail-nav {
+    flex-direction: row;
+  }
+
+  .about-rail .rail-link {
+    flex: 1 1 auto;
+    justify-content: center;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .about-cta {
+    transition: none;
+  }
+}

@@ -802,11 +802,35 @@ Measured, not assumed: drawing all ~10,700 satellites costs roughly nothing (one
 
 So the scene times itself and steps quality down (`notifyFrame` in `src/globe2/scene.ts`); `?quality=high` or `?quality=low` pins a tier, which is how to take reproducible screenshots on a machine whose GPU differs from the viewer's. Before optimising anything here, measure which of the two it is — headless Chromium runs on SwiftShader and is not representative of real hardware.
 
+### Only credible frames may downgrade a tier
+
+The decision lives in `src/globe2/quality-sampler.ts`, extracted from the scene so it can be tested without a WebGL context — `spec/quality-sampler.test.ts` covers it.
+
+This caused the long-standing "the globe goes low-resolution and blown-out after switching tabs, and only a reload fixes it" bug. Browsers throttle `requestAnimationFrame` to roughly 1fps in a background tab, the loop was feeding the real unclamped delta to the sampler, and ~1000ms frames read as a sustained 1fps — so twenty seconds in another tab silently stepped High → Medium → Low. At `Low` the pixel ratio halves *and* `render()` bypasses the composer, and those two together are exactly the reported symptom.
+
+So: frames longer than `MAX_CREDIBLE_FRAME_MS` (250ms) are a stall, not a frame rate, and discard the window instead of contributing to it. `main.ts` also re-bases `lastTime` and calls `resetFrameSampling()` on `visibilitychange`. **A downgrade must only ever come from frames the GPU actually rendered.** If you add another source of long frames, make sure it cannot reach the sampler.
+
+Context loss is handled too (`webglcontextlost`/`webglcontextrestored` in `scene.ts`): the lost event must call `preventDefault()` or the browser never restores, `render()` no-ops while lost, and `resize()` rebuilds the composer's targets on restore. Recover in place — never reload the page to paper over a rendering fault.
+
 ## Prompt-primary selection
 
 The on-globe prompt (`#prompt-host`, `src/ui/prompt.ts`) is the primary selection mechanic; the origin/destination `<select>` elements in `src/ui/panel.ts` are kept only for keyboard/screen-reader users and sit behind a collapsed `<details>` disclosure. Don't remove the selects outright — that would regress the Accessibility section above — and don't promote them back above the prompt.
 
 Ground stations live in a `<fieldset class="mode-box">` alongside the Starlink switch, because the two toggles are conceptually related (ground stations only matter once Starlink is on) even though they stay independent switches. If a new mode-specific toggle is added later, it belongs in `mode-box`, not the layer pills.
+
+## The left rail is the site's only navigation, and the collapse control lives inside it
+
+`.sidebar-rail` (markup in `index.html` and `about.html`, styles in `styles.css`) holds the primary nav links and, on the globe page, the collapse button injected by `src/ui/sidebar-toggle.ts`. There is no top-right nav — it was removed, and a second navigation system must not be reintroduced somewhere else.
+
+The collapse button is **inside the sidebar's flex layout**, in a strip that never scrolls. An earlier version floated it off the sidebar's right edge on a negative offset, and every viewport variation broke it a different way: clipped by the host's `overflow`, scrolled out of reach with the panel on short screens, or half-hidden under the neighbouring column. Anything that has to stay reachable at every viewport size belongs in the layout, not hanging off it — do not reach for absolute positioning to fix a control that is getting clipped.
+
+Collapsing hides `.control-host-inner` only. The rail always survives, which is what guarantees there is always a way back.
+
+### Mobile collapse means gone, not smaller
+
+On mobile the collapsed sidebar goes `position: fixed` as a pill in the bottom-left corner, so its grid row drops to zero height and the space genuinely returns to the globe (`.ui:has(#control-host.is-collapsed)` retunes `grid-template-rows`). Collapsing it to a short band instead — which is what it did first — leaves the row still eating height and misses the point.
+
+`applyPhase()` in `main.ts` stamps `document.body.dataset.phase` and, on narrow screens only, auto-collapses on entering `"journey"` and reopens on leaving it: during the traceroute the controls are spending height on choices already made. This runs only on phase change, so it never fights a deliberate collapse or expand by the user.
 
 ## The globe is a second scrollbar for the journey, once one is playing
 

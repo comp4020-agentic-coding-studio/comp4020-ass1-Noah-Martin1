@@ -9,6 +9,17 @@
   --accent-ink: #04140a;
   --node: #ffb347;
   --focus: #ffd08a;
+
+  /* Matches PALETTE.atmosphere in src/globe2/constants.ts, so the sidebar's
+     general chrome reads as part of the same globe rather than a bolted-on
+     dashboard skin. */
+  --blue: #4c9bff;
+  --blue-line: rgb(76 155 255 / 28%);
+
+  /* Matches PALETTE.groundStation -- the same purple already used on the
+     globe for Starlink ground stations. */
+  --purple: #c08bff;
+  --purple-line: rgb(192 139 255 / 30%);
   --font-display: ui-monospace, "SF Mono", "Cascadia Mono", "Roboto Mono", "Fira Code", menlo, consolas, monospace;
   --font-body: -apple-system, blinkmacsystemfont, "Segoe UI", helvetica, arial, sans-serif;
 }
@@ -90,9 +101,16 @@ canvas:focus-visible {
   inset: 0;
   z-index: 1;
   display: grid;
-  grid-template-columns: minmax(280px, 340px) minmax(0, 1fr) minmax(300px, 380px);
+  grid-template-columns: var(--control-col, minmax(280px, 340px)) minmax(0, 1fr) minmax(300px, 380px);
   grid-template-rows: auto minmax(0, 1fr);
   pointer-events: none;
+  transition:
+    grid-template-columns 0.3s ease,
+    grid-template-rows 0.3s ease;
+}
+
+.ui:has(#control-host.is-collapsed) {
+  --control-col: 64px;
 }
 
 .site-header {
@@ -113,16 +131,6 @@ canvas:focus-visible {
   font-weight: 700;
   letter-spacing: -0.01em;
   margin: 0;
-}
-
-.site-header nav {
-  font-family: var(--font-display);
-  font-size: 0.72rem;
-  letter-spacing: 0.04em;
-}
-
-.site-header nav a[aria-current="page"] {
-  color: var(--accent);
 }
 
 .stage-column {
@@ -146,16 +154,135 @@ canvas:focus-visible {
   grid-column: 1;
   grid-row: 2;
   min-height: 0;
-  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+
+  /*
+   * Nothing overhangs the sidebar any more, so this can clip cleanly. The
+   * collapse control used to hang off the right edge on a negative offset,
+   * which meant it was clipped here, scrolled away with the panel on short
+   * viewports, and sat half underneath the globe column. It now lives in
+   * .sidebar-rail, inside the layout, where none of those can reach it.
+   */
+  overflow: hidden;
   pointer-events: auto;
+  background: linear-gradient(180deg, rgb(9 16 32 / 85%), rgb(4 7 16 / 88%));
+  border-right: 1px solid var(--blue-line);
+  backdrop-filter: blur(14px);
+}
+
+/* --- navigation rail: the site's primary navigation, and the collapse
+   control. Never scrolls, so it is reachable at any viewport height. --- */
+
+.sidebar-rail {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px 10px;
+  border-bottom: 1px solid var(--hair);
+}
+
+.rail-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.rail-link,
+.sidebar-toggle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+
+  /* 44px: a comfortable touch target without needing a separate mobile size. */
+  min-height: 44px;
+  padding: 0 11px;
+  border-radius: 10px;
+  font-family: var(--font-display);
+  font-size: 0.76rem;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+  transition:
+    color 0.2s ease,
+    background 0.2s ease,
+    border-color 0.2s ease,
+    box-shadow 0.2s ease;
+}
+
+.rail-link {
+  color: var(--muted);
+  border: 1px solid transparent;
+}
+
+.rail-link:hover {
+  color: var(--ink);
+  background: rgb(76 155 255 / 8%);
+}
+
+.rail-link[aria-current="page"] {
+  color: var(--blue);
+  border-color: var(--blue-line);
+  background: rgb(76 155 255 / 8%);
+}
+
+.rail-glyph,
+.sidebar-toggle-glyph {
+  flex: none;
+  width: 24px;
+  height: 24px;
+  display: grid;
+  place-items: center;
+  border: 1px solid currentcolor;
+  border-radius: 50%;
+  font-size: 0.72rem;
+  line-height: 1;
+}
+
+.sidebar-toggle {
+  background: rgb(76 155 255 / 7%);
+  color: var(--blue);
+  border: 1px solid rgb(76 155 255 / 45%);
+  cursor: pointer;
+  font: inherit;
+  font-family: var(--font-display);
+  font-size: 0.76rem;
+  letter-spacing: 0.04em;
+}
+
+.sidebar-toggle:hover,
+.sidebar-toggle:focus-visible {
+  border-color: var(--blue);
+  background: rgb(76 155 255 / 14%);
+  box-shadow: 0 0 16px rgb(76 155 255 / 35%);
+}
+
+.control-host-inner {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 6px;
-  padding: 16px 14px;
-  background: var(--story-bg);
-  border-right: 1px solid var(--hair);
-  backdrop-filter: blur(14px);
+  gap: 18px;
+  padding: 18px 16px 22px;
+}
+
+/* Collapsed: the sidebar keeps only its rail, so navigation and the way back
+   out both stay on screen. */
+#control-host.is-collapsed .control-host-inner {
+  display: none;
+}
+
+#control-host.is-collapsed .rail-label,
+#control-host.is-collapsed .sidebar-toggle-text {
+  display: none;
+}
+
+#control-host.is-collapsed .rail-link,
+#control-host.is-collapsed .sidebar-toggle {
+  justify-content: center;
+  padding: 0;
 }
 
 .hint {
@@ -206,6 +333,13 @@ canvas:focus-visible {
 @media (prefers-reduced-motion: reduce) {
   .prompt {
     animation: none;
+  }
+
+  .ui,
+  .control-host-inner,
+  .rail-link,
+  .sidebar-toggle {
+    transition: none;
   }
 }
 
@@ -310,21 +444,24 @@ canvas:focus-visible {
 
 .panel {
   width: 100%;
-  background: var(--panel-bg);
-  border: 1px solid var(--hair);
-  border-radius: 12px;
-  padding: 7px 9px;
+  background: linear-gradient(160deg, rgb(13 22 40 / 85%), rgb(6 10 20 / 85%));
+  border: 1px solid var(--blue-line);
+  border-radius: 16px;
+  padding: 18px 16px;
   display: flex;
   flex-direction: column;
-  gap: 5px;
+  gap: 16px;
   pointer-events: auto;
   backdrop-filter: blur(12px);
+  box-shadow:
+    0 0 24px rgb(76 155 255 / 8%),
+    inset 0 1px 0 rgb(255 255 255 / 4%);
 }
 
 .panel-row {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 8px;
+  gap: 10px;
 }
 
 .panel-row-actions {
@@ -372,17 +509,18 @@ canvas:focus-visible {
    other, kept as two separate switches. --- */
 
 .mode-box {
-  border: 1px solid var(--hair);
-  border-radius: 10px;
+  background: rgb(192 139 255 / 5%);
+  border: 1px solid var(--purple-line);
+  border-radius: 12px;
   margin: 0;
-  padding: 6px 9px;
+  padding: 12px 14px;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 10px;
 }
 
 .mode-box legend {
-  color: var(--muted);
+  color: rgb(232 220 255 / 75%);
   font-family: var(--font-display);
   font-size: 0.66rem;
   letter-spacing: 0.04em;
@@ -457,13 +595,16 @@ canvas:focus-visible {
   transition: transform 0.15s ease;
 }
 
+/* Both switches that exist live in the purple-themed Starlink mode-box, so
+   the checked state is purple rather than the general green accent. */
 .switch input:checked + .switch-track {
-  background: var(--accent);
+  background: var(--purple);
+  box-shadow: 0 0 10px rgb(192 139 255 / 45%);
 }
 
 .switch input:checked + .switch-track::after {
   transform: translateX(16px);
-  background: var(--accent-ink);
+  background: #1b0f2e;
 }
 
 .switch input:focus-visible + .switch-track {
@@ -475,42 +616,55 @@ canvas:focus-visible {
   display: flex;
   flex-wrap: wrap;
   justify-content: flex-end;
-  gap: 8px;
+  gap: 10px;
   justify-self: end;
 }
 
 .random-button,
 .reset-button {
-  background: transparent;
+  background: rgb(84 255 143 / 4%);
   color: var(--ink);
-  border: 1px solid var(--hair);
+  border: 1px solid rgb(84 255 143 / 35%);
   border-radius: 999px;
   padding: 6px 14px;
   font: inherit;
   font-size: 0.78rem;
   cursor: pointer;
+  transition:
+    border-color 0.2s ease,
+    color 0.2s ease,
+    background 0.2s ease,
+    box-shadow 0.2s ease;
 }
 
-.random-button:hover {
+.random-button:hover,
+.random-button:focus-visible {
   border-color: var(--accent);
   color: var(--accent);
+  background: rgb(84 255 143 / 8%);
+  box-shadow: 0 0 16px rgb(84 255 143 / 35%);
 }
 
 /* Distinct from "randomize" — this one undoes the current selection, so it
    gets the same error-red used for a blocked location rather than the
    accent green. */
-.reset-button:hover {
+.reset-button:hover,
+.reset-button:focus-visible {
   border-color: rgb(255 90 106 / 70%);
   color: #ff8791;
+  background: rgb(255 90 106 / 8%);
+  box-shadow: 0 0 16px rgb(255 90 106 / 30%);
 }
 
 .layers {
-  border: none;
+  background: rgb(76 155 255 / 4%);
+  border: 1px solid var(--blue-line);
+  border-radius: 12px;
   margin: 0;
-  padding: 0;
+  padding: 10px;
   display: flex;
   flex-wrap: wrap;
-  gap: 4px;
+  gap: 8px;
 }
 
 .layers legend {
@@ -535,12 +689,13 @@ canvas:focus-visible {
 }
 
 .pill:has(input:checked) {
-  border-color: var(--accent);
-  color: var(--accent);
+  border-color: var(--blue);
+  color: var(--blue);
+  box-shadow: 0 0 10px rgb(76 155 255 / 30%);
 }
 
 .pill input {
-  accent-color: var(--accent);
+  accent-color: var(--blue);
 }
 
 .feedback {
@@ -678,9 +833,72 @@ canvas:focus-visible {
   #control-host {
     grid-column: 1;
     grid-row: 3;
-    max-height: 32dvh;
+    max-height: 34dvh;
     border-right: none;
-    border-top: 1px solid var(--hair);
+    border-top: 1px solid var(--blue-line);
+  }
+
+  /* The rail runs across the band rather than down it: a 64px column would
+     eat a sixth of a 390px screen for navigation alone. */
+  .sidebar-rail {
+    flex-direction: row;
+    align-items: center;
+    padding: 8px 10px;
+    border-bottom: 1px solid var(--hair);
+  }
+
+  .rail-nav {
+    flex: 1 1 auto;
+    flex-direction: row;
+    justify-content: flex-end;
+    gap: 6px;
+  }
+
+  /*
+   * Collapsed on a phone means gone, not smaller. Taking it out of flow drops
+   * its grid row to zero height and hands every pixel back to the globe; what
+   * is left is a floating pill in the bottom corner -- clear of the centred
+   * prompt and of the story sheet's own scrolling -- that opens it again.
+   */
+  #control-host.is-collapsed {
+    position: fixed;
+    inset: auto auto 12px 12px;
+    z-index: 4;
+    width: auto;
+    max-height: none;
+    border: 1px solid rgb(76 155 255 / 45%);
+    border-radius: 999px;
+    box-shadow: 0 4px 18px rgb(0 0 0 / 45%);
+  }
+
+  #control-host.is-collapsed .sidebar-rail {
+    padding: 5px 6px;
+    border-bottom: none;
+  }
+
+  #control-host.is-collapsed .rail-link,
+  #control-host.is-collapsed .sidebar-toggle {
+    padding: 0 8px;
+  }
+
+  /* The pill is the only way back, so its label stays -- an unlabelled glyph
+     floating over the globe would read as decoration. */
+  #control-host.is-collapsed .sidebar-toggle-text {
+    display: inline;
+  }
+
+  /* With the controls out of the way the globe takes the freed row. */
+  .ui:has(#control-host.is-collapsed) {
+    grid-template-rows: auto minmax(0, 62dvh) 0 minmax(0, 1fr);
+  }
+
+  /*
+   * Following the route is a watching task, not a configuring one, so the
+   * journey gives the globe the taller band and leans on the story sheet
+   * below it. Selection phases keep the roomier controls.
+   */
+  body[data-phase="journey"] .ui:has(#control-host.is-collapsed) {
+    grid-template-rows: auto minmax(0, 54dvh) 0 minmax(0, 1fr);
   }
 
   #story-host {
