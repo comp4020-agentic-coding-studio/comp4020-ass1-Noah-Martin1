@@ -3,6 +3,7 @@ import { EffectComposer } from "three/examples/jsm/postprocessing/EffectComposer
 import { RenderPass } from "three/examples/jsm/postprocessing/RenderPass.js";
 import { UnrealBloomPass } from "three/examples/jsm/postprocessing/UnrealBloomPass.js";
 import { EARTH_RADIUS_UNITS, PALETTE } from "./constants";
+import { createQualitySampler } from "./quality-sampler";
 
 export interface FocusRect {
   x: number;
@@ -31,6 +32,12 @@ export interface GlobeScene {
   render(): void;
   /** Feeds frame timing to the adaptive quality controller. */
   notifyFrame(dtMs: number): void;
+  /**
+   * Throws away the in-flight quality sample. Call this after anything that
+   * stops the frame loop (a backgrounded tab, a lost context) so the stall is
+   * never mistaken for a slow GPU.
+   */
+  resetFrameSampling(): void;
 }
 
 /**
@@ -86,6 +93,7 @@ export function createGlobeScene(canvas: HTMLCanvasElement): GlobeScene {
   composer.addPass(bloom);
 
   let focusRect: FocusRect | null = null;
+  let contextLost = false;
 
   // `?quality=high` / `?quality=low` pins the tier, which is what makes visual
   // checks reproducible on a machine whose GPU differs from the viewer's.
@@ -144,6 +152,10 @@ export function createGlobeScene(canvas: HTMLCanvasElement): GlobeScene {
   }
 
   function render(): void {
+    // Drawing into a lost context throws a wall of GL warnings and achieves
+    // nothing; the loop keeps running so animation resumes the moment the
+    // browser hands the context back.
+    if (contextLost) return;
     // At the lowest tier the composer is bypassed entirely rather than run with
     // a disabled pass, so there is no full-screen copy left in the pipeline.
     if (quality === Quality.Low) {
@@ -155,31 +167,40 @@ export function createGlobeScene(canvas: HTMLCanvasElement): GlobeScene {
 
   // --- adaptive quality ---------------------------------------------------
 
-  let sampleTotal = 0;
-  let sampleCount = 0;
+  const sampler = createQualitySampler();
+
+  function resetFrameSampling(): void {
+    sampler.reset();
+  }
 
   function notifyFrame(dtMs: number): void {
     if (!adaptive || quality === Quality.Low) return;
+    if (!sampler.sample(dtMs)) return;
 
-    sampleTotal += dtMs;
-    sampleCount++;
-    // Judge over a window of wall time, not a frame count: at 10fps a
-    // 90-frame window would take nine seconds to notice a problem. A minimum
-    // count still stops one hitch (a texture upload, a route rebuild) from
-    // triggering a downgrade on its own.
-    if (sampleTotal < 1500 || sampleCount < 10) return;
-
-    const average = sampleTotal / sampleCount;
-    sampleTotal = 0;
-    sampleCount = 0;
-
-    // Below ~36fps sustained, drop a tier. Downgrades are one-way: oscillating
-    // between tiers would be more distracting than the lower setting itself.
-    if (average > 28) {
-      quality = quality === Quality.High ? Quality.Medium : Quality.Low;
-      resize();
-    }
+    // Downgrades are one-way: oscillating between tiers would be more
+    // distracting than the lower setting itself.
+    quality = quality === Quality.High ? Quality.Medium : Quality.Low;
+    resize();
   }
+
+  /*
+   * A GPU can drop the context at any time -- a driver reset, the OS reclaiming
+   * memory from a long-backgrounded tab. Without preventDefault() the browser
+   * never fires "restored" and the canvas is dead until a reload, which is the
+   * one outcome this page must not need. three re-uploads its own textures,
+   * geometries and programs on restore; the composer's render targets are
+   * rebuilt by resize().
+   */
+  canvas.addEventListener("webglcontextlost", (event) => {
+    event.preventDefault();
+    contextLost = true;
+  });
+
+  canvas.addEventListener("webglcontextrestored", () => {
+    contextLost = false;
+    resetFrameSampling();
+    resize();
+  });
 
   resize();
 
@@ -194,5 +215,6 @@ export function createGlobeScene(canvas: HTMLCanvasElement): GlobeScene {
     resize,
     render,
     notifyFrame,
+    resetFrameSampling,
   };
 }
