@@ -1,31 +1,15 @@
 # Assignment 1 reflection
 
-**The breakthrough that moved the work forward** was deciding what Starlink
-should actually replace. My first instinct was the simple version: a toggle
-that swaps the whole route for an all-satellite path. That would have been
-easy to build and easy to demo, but it isn't how Starlink works — it's a
-last-mile technology, not a replacement for the entire internet backbone. Once
-I modelled it that way instead (device → satellite → ground station, then back
-onto the same fibre, exchanges, and undersea cables a normal request uses), the
-rest of the prototype's educational framing fell into place: the story panel
-could honestly say "this part is different, this part isn't," which is the
-actual point of the assignment. The harder, more accurate model turned out to
-be less work than I expected, because it reused almost all of the terrestrial
-route-building logic instead of duplicating it for a satellite-only path.
+**The breakthrough that moved the work forward**
 
-**What this changed about who I want to be as a developer** is a bias toward
-measuring instead of eyeballing — and, more specifically, toward measuring
-before optimising. When the globe dropped to 7fps with all 10,753 satellites on
-screen, the satellites were the obvious suspect and cutting them down was the
-obvious fix. Measuring took ten minutes and showed the opposite: turning the
-satellites off changed nothing, while shrinking the window quadrupled the frame
-rate. The cost was the bloom pass, not the objects. Had I trusted the obvious
-reading I would have thrown away the exact thing the visualisation is *for* —
-the density of a real constellation — to fix a problem it wasn't causing.
+Early in the assignment, I considered building a website visualising aircraft at different altitudes, inspired by the ocean-depth scrolling example. However, when I asked Claude to produce example aircraft graphics, the results were poor SVG representations, and I realised that sourcing or creating many suitable aircraft images would become a major limitation. Rather than forcing Claude to implement a theme that depended on a capability it struggled with, I changed the idea itself.
 
-The same lesson showed up quietly in layout, where screenshots that "looked
-fine" hid a globe box that wasn't square and a `<select>` overflowing its
-container; both only surfaced once I read the real numbers out of the DOM. I
-want to be the kind of developer who treats "this looks right" as a hypothesis
-rather than a result, because looking right is precisely the condition under
-which the wrong fix is most tempting.
+I began thinking about what Claude was actually good at. Since it works well with SVGs and data-driven graphics, I wanted a concept that could be represented as a wireframe rather than relying on detailed illustrations. This led to the idea of visualising internet traffic across the globe. Country boundaries, infrastructure locations and network nodes could be represented as data, while the main visual problem became connecting those points and animating paths between them. This data-oriented approach gave Claude a problem within its strengths: mapping objects and finding paths between defined nodes, rather than repeatedly trying to generate complex graphical assets.
+
+From there, I researched what real network and satellite data could be incorporated and used that information to progressively shape the prototype.
+
+**What this changed about who I want to be as a developer**
+
+This assignment reinforced that I want to approach development as owning a toolbox and knowing which tool is appropriate for a particular problem. AI can sometimes act like an ultimate yes-man: it is capable of solving many problems, but can also confidently attempt things that are outside its strengths. That can be difficult to recognise because models like Claude are genuinely very capable within their toolset.
+
+The more I have worked with AI during these assignments, the better I have become at recognising those boundaries. I now see an LLM as a powerful development tool, but still a tool with real limitations. As a developer, I think it is my responsibility to understand those limitations and use AI where it provides an advantage, rather than designing my work around an assumption that it can do everything.
